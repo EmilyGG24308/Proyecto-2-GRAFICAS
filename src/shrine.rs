@@ -73,26 +73,68 @@ pub fn build_shrine_scene() -> Scene {
 }
 
 fn add_materials(scene: &mut Scene) -> Materials {
-    let mut add = |r, g, b, specular, shininess| {
-        scene.add_material(Material::new(Color::new(r, g, b), specular, shininess))
+    // ================= THE FIVE GRADED MATERIALS =================
+    // Each has its own texture and its own albedo, specular, transparency
+    // and reflectivity. Zero is a real, deliberate value (grass is not a mirror).
+    //
+    //  material         | albedo | specular (strength, shininess) | transparency | reflectivity | refractive index
+    //  vermilion lacquer |  0.95  | 0.60, 48  glossy paint         |     0.0      |    0.10      |   –
+    //  path stone        |  0.85  | 0.10, 16  worn, slightly waxy  |     0.0      |    0.0       |   –
+    //  grass block       |  0.90  | 0.00      completely matte     |     0.0      |    0.0       |   –
+    //  sakura blossom    |  0.95  | 0.05, 4   soft petals          |     0.0      |    0.0       |   –
+    //  pond water        |  0.35  | 0.90, 96  sharp sun glint      |     0.80     |    0.25      |  1.33
+    let lacquer_texture = scene.load_texture("lacquer");
+    let lacquer = scene.add_material(Material {
+        reflectivity: 0.10,
+        ..Material::opaque(lacquer_texture, 0.95, 0.6, 48.0)
+    });
+
+    let path_stone_texture = scene.load_texture("path_stone");
+    let path_stone = scene.add_material(Material::opaque(path_stone_texture, 0.85, 0.1, 16.0));
+
+    let grass_top = scene.load_texture("grass_top");
+    let grass_side = scene.load_texture("grass_side");
+    let dirt_texture = scene.load_texture("dirt");
+    let grass = scene.add_material(Material {
+        texture_top: grass_top,
+        texture_bottom: dirt_texture,
+        ..Material::opaque(grass_side, 0.9, 0.0, 1.0)
+    });
+
+    let sakura_texture = scene.load_texture("sakura");
+    let sakura_light = scene.add_material(Material::opaque(sakura_texture, 0.95, 0.05, 4.0));
+
+    let water_texture = scene.load_texture("water");
+    let water = scene.add_material(Material {
+        transparency: 0.80,
+        reflectivity: 0.25,
+        refractive_index: 1.33,
+        ..Material::opaque(water_texture, 0.35, 0.9, 96.0)
+    });
+
+    // ================= Supporting materials =================
+    let mut textured = |name: &str, albedo: f32, specular: f32, shininess: f32| {
+        let texture = scene.load_texture(name);
+        scene.add_material(Material::opaque(texture, albedo, specular, shininess))
     };
     Materials {
-        grass: add(0.45, 0.72, 0.38, 0.0, 1.0),
-        dirt: add(0.52, 0.37, 0.26, 0.0, 1.0),
-        rock: add(0.5, 0.5, 0.54, 0.05, 8.0),
-        path_stone: add(0.78, 0.74, 0.68, 0.1, 16.0),
-        lacquer: add(0.85, 0.22, 0.15, 0.6, 48.0),
-        shrine_wood: add(0.72, 0.52, 0.32, 0.05, 8.0),
-        bark: add(0.35, 0.22, 0.16, 0.0, 1.0),
-        roof_tile: add(0.3, 0.33, 0.42, 0.3, 24.0),
-        sakura_light: add(1.0, 0.75, 0.85, 0.0, 1.0),
-        sakura_dark: add(0.93, 0.55, 0.7, 0.0, 1.0),
-        water: add(0.3, 0.55, 0.85, 0.8, 64.0),
-        sand: add(0.85, 0.78, 0.6, 0.0, 1.0),
-        plaster: add(0.93, 0.9, 0.84, 0.02, 4.0),
-        house_roof: add(0.35, 0.45, 0.5, 0.2, 16.0),
-        road: add(0.42, 0.42, 0.45, 0.0, 1.0),
-        paper: add(1.0, 0.93, 0.75, 0.0, 1.0),
+        grass,
+        dirt: textured("dirt", 0.9, 0.0, 1.0),
+        rock: textured("rock", 0.9, 0.05, 8.0),
+        path_stone,
+        lacquer,
+        shrine_wood: textured("shrine_wood", 0.9, 0.05, 8.0),
+        bark: textured("bark", 0.9, 0.0, 1.0),
+        roof_tile: textured("roof_tile", 0.9, 0.3, 24.0),
+        sakura_light,
+        // Same blossom texture, lit a little less, so canopies have two pinks.
+        sakura_dark: textured("sakura", 0.75, 0.05, 4.0),
+        water,
+        sand: textured("sand", 0.9, 0.0, 1.0),
+        plaster: textured("plaster", 0.9, 0.02, 4.0),
+        house_roof: textured("house_roof", 0.9, 0.2, 16.0),
+        road: textured("road", 0.9, 0.0, 1.0),
+        paper: textured("paper", 0.95, 0.0, 1.0),
     }
 }
 

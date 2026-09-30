@@ -9,6 +9,7 @@ mod ray;
 mod renderer;
 mod scene;
 mod shrine;
+mod texture;
 mod vec3;
 
 use camera::Camera;
@@ -41,7 +42,11 @@ fn main() {
 
     // `cargo run --release -- --snapshot` renders one frame to a file and exits,
     // without opening a window. Handy for checking output and for the README.
+    // Add `--hd` to render that frame at 1280×720 instead.
     if std::env::args().any(|argument| argument == "--snapshot") {
+        if std::env::args().any(|argument| argument == "--hd") {
+            framebuffer = Framebuffer::new(1280, 720);
+        }
         render_frame(&mut framebuffer, &camera, &scene, show_normals);
         save_screenshot(&framebuffer);
         return;

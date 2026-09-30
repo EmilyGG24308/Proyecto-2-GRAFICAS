@@ -3,7 +3,9 @@ use crate::cube::Hit;
 use crate::grid::BlockGrid;
 use crate::material::Material;
 use crate::ray::Ray;
+use crate::texture::Texture;
 use crate::vec3::Vec3;
+use std::path::PathBuf;
 
 /// A light infinitely far away, so its rays all arrive parallel (like the real sun).
 pub struct Sun {
@@ -15,6 +17,7 @@ pub struct Sun {
 pub struct Scene {
     pub blocks: BlockGrid,
     pub materials: Vec<Material>,
+    pub textures: Vec<Texture>,
     pub sun: Sun,
     /// Light that reaches every surface, even in shadow (a stand-in for sky light).
     pub ambient: Color,
@@ -27,9 +30,29 @@ impl Scene {
         Scene {
             blocks: BlockGrid::new(min_corner, size),
             materials: Vec::new(),
+            textures: Vec::new(),
             sun,
             ambient,
         }
+    }
+
+    /// Loads assets/textures/<name>.bmp and returns its texture number.
+    /// A missing or broken file prints a warning and shows up magenta.
+    pub fn load_texture(&mut self, name: &str) -> usize {
+        let file_name = format!("{name}.bmp");
+        // Look next to where the program was started first, then in the project folder.
+        let local = PathBuf::from("assets").join("textures").join(&file_name);
+        let path = if local.exists() {
+            local
+        } else {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets").join("textures").join(&file_name)
+        };
+        let texture = Texture::load_bmp(&path).unwrap_or_else(|error| {
+            eprintln!("Warning: could not load texture ({error}); using a magenta placeholder");
+            Texture::missing()
+        });
+        self.textures.push(texture);
+        self.textures.len() - 1
     }
 
     /// The nearest block the ray hits between t_min and t_max.
