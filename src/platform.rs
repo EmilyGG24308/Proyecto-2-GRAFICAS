@@ -12,6 +12,7 @@ type Handle = *mut c_void;
 pub mod key {
     pub const ESCAPE: usize = 0x1B;
     pub const F12: usize = 0x7B;
+    pub const N: usize = 0x4E;
 }
 
 // Message and flag values, copied from the Windows headers.

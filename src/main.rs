@@ -1,15 +1,19 @@
 mod camera;
 mod color;
+mod cube;
 mod framebuffer;
 mod platform;
 mod ray;
+mod scene;
 mod vec3;
 
 use camera::Camera;
 use color::Color;
+use cube::Hit;
 use framebuffer::Framebuffer;
 use platform::{Window, key};
 use ray::Ray;
+use scene::Scene;
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use vec3::Vec3;
@@ -25,15 +29,18 @@ const WINDOW_TITLE: &str = "Mikage Shrine Raytracer";
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
     let camera = Camera {
-        position: Vec3::new(0.0, 2.0, 6.0),
-        target: Vec3::new(0.0, 0.5, 0.0),
+        position: Vec3::new(3.5, 3.0, 7.0),
+        target: Vec3::new(0.0, 1.0, 0.0),
         vertical_fov_degrees: 60.0,
     };
+    let scene = scene::build_test_scene();
+    // N key (or --normals) shows each face's normal as a color, to check the faces.
+    let mut show_normals = std::env::args().any(|argument| argument == "--normals");
 
     // `cargo run --release -- --snapshot` renders one frame to a file and exits,
     // without opening a window. Handy for checking output and for the README.
     if std::env::args().any(|argument| argument == "--snapshot") {
-        render_frame(&mut framebuffer, &camera);
+        render_frame(&mut framebuffer, &camera, &scene, show_normals);
         save_screenshot(&framebuffer);
         return;
     }
@@ -58,8 +65,12 @@ fn main() {
             break;
         }
 
+        if window.was_key_pressed(key::N) {
+            show_normals = !show_normals;
+        }
+
         // 1. RENDER: compute every pixel's color into our own memory.
-        render_frame(&mut framebuffer, &camera);
+        render_frame(&mut framebuffer, &camera, &scene, show_normals);
 
         // 2. DISPLAY: hand the finished image to Windows to show.
         window.present(&framebuffer);
@@ -81,33 +92,49 @@ fn main() {
 }
 
 /// Shoots one ray per pixel and stores the color it sees.
-fn render_frame(framebuffer: &mut Framebuffer, camera: &Camera) {
+fn render_frame(framebuffer: &mut Framebuffer, camera: &Camera, scene: &Scene, show_normals: bool) {
     for y in 0..framebuffer.height {
         for x in 0..framebuffer.width {
             let ray = camera.ray_for_pixel(x, y, framebuffer.width, framebuffer.height);
-            framebuffer.set_pixel(x, y, shade_ray(&ray));
+            framebuffer.set_pixel(x, y, shade_ray(&ray, scene, show_normals));
         }
     }
 }
 
-/// Temp scene 
-fn shade_ray(ray: &Ray) -> Color {
-    // Ground plane y = 0. Solve origin.y + t * direction.y = 0 for t.
-    if ray.direction.y < 0.0 {
-        let t = -ray.origin.y / ray.direction.y;
-        let hit_point = ray.at(t);
-        let is_dark_tile = (hit_point.x.floor() + hit_point.z.floor()) as i32 % 2 == 0;
-        return if is_dark_tile {
-            Color::new(0.35, 0.55, 0.3)
-        } else {
-            Color::new(0.55, 0.75, 0.45)
-        };
+fn shade_ray(ray: &Ray, scene: &Scene, show_normals: bool) -> Color {
+    match scene.closest_hit(ray, 0.0, f32::INFINITY) {
+        Some(hit) if show_normals => normal_as_color(&hit),
+        Some(hit) => hit.color.scaled(face_brightness(hit.normal)),
+        None => sky_color(ray.direction),
     }
+}
 
-    // Sky: pink at the horizon (direction.y = 0), blue straight up (direction.y = 1).
+/// Temporary fixed shading: each face direction gets its own brightness, so the three visible sides look different.
+fn face_brightness(normal: Vec3) -> f32 {
+    if normal.y > 0.5 {
+        1.0 // top
+    } else if normal.y < -0.5 {
+        0.5 // bottom
+    } else if normal.x.abs() > 0.5 {
+        0.8 // left / right sides
+    } else {
+        0.65 // front / back sides
+    }
+}
+
+/// Debug view: maps the normal's -1..1 range to a 0..1 color.
+/// +X face = reddish, +Y (top) = greenish, +Z (front) = bluish.
+fn normal_as_color(hit: &Hit) -> Color {
+    let n = hit.normal;
+    Color::new(n.x * 0.5 + 0.5, n.y * 0.5 + 0.5, n.z * 0.5 + 0.5)
+}
+
+/// Temporary sky gradient 
+/// pink at the horizon, blue straight up.
+fn sky_color(direction: Vec3) -> Color {
     let horizon = Color::new(1.0, 0.8, 0.88);
     let zenith = Color::new(0.45, 0.65, 1.0);
-    horizon.lerp(zenith, ray.direction.y)
+    horizon.lerp(zenith, direction.y.max(0.0))
 }
 
 /// Saves the framebuffer to screenshots/shot_<milliseconds>.bmp.

@@ -35,6 +35,15 @@ impl Vec3 {
         self.dot(self).sqrt()
     }
 
+    /// [x, y, z], so code can loop over the three axes (0 = X, 1 = Y, 2 = Z).
+    pub fn to_array(self) -> [f32; 3] {
+        [self.x, self.y, self.z]
+    }
+
+    pub fn from_array(values: [f32; 3]) -> Vec3 {
+        Vec3::new(values[0], values[1], values[2])
+    }
+
     /// Same direction, length 1.
     pub fn normalized(self) -> Vec3 {
         self * (1.0 / self.length())

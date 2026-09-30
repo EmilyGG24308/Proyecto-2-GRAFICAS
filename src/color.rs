@@ -15,6 +15,11 @@ impl Color {
         Color { r, g, b }
     }
 
+    /// Multiplies every channel by `factor` (0.5 = half as bright).
+    pub fn scaled(self, factor: f32) -> Color {
+        Color::new(self.r * factor, self.g * factor, self.b * factor)
+    }
+
     /// Blends from `self` (t = 0) to `other` (t = 1). t = 0.5 gives the halfway color.
     pub fn lerp(self, other: Color, t: f32) -> Color {
         Color::new(
