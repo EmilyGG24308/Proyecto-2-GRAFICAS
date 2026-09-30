@@ -131,7 +131,7 @@ fn main() {
 
 /// The overview the program starts with (and R returns to).
 fn starting_controls() -> Controls {
-    Controls::new(Vec3::new(44.0, 40.0, 50.0), Vec3::new(0.0, 9.0, -2.0), 40.0)
+    Controls::new(Vec3::new(62.0, 56.0, 74.0), Vec3::new(0.0, 12.0, -6.0), 40.0)
 }
 
 

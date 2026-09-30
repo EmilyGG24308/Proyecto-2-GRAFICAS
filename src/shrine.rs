@@ -1,12 +1,15 @@
 //! Scene 1: the Mikage Shrine on its hill, with the town below.
 //!
-//! ROUGH DRAFT ("blockout"): plain colors, simple shapes, to check scale and
-//! layout. Textures come in Phase 5 and detail in Phase 10.
+//! Layout (X = left/right, Z = back(-)/front(+), Y = up), 64 × 64 blocks:
+//!   back   (z -32..-8): the hilltop: shrine hall, torii, lanterns, guardian
+//!                       statues, water basin, red bridge over the koi pond,
+//!                       sakura and pine trees, and a trail to a mossy cave
+//!   middle (z -7..7):   the steep hillside with the long stone staircase
+//!   front  (z 8..31):   the town: two streets, houses and shops, poles
 //!
-//! Layout (X = left/right, Z = back(-)/front(+), Y = up):
-//!   back  (z -24..-3): the hill top with the shrine, torii, pond, trees
-//!   middle (z -2..11): the slope with the long stone staircase
-//!   front (z 12..23): the town: streets, houses, utility poles
+//! Every part is built by its own small function below, from plain
+//! "fill this box with that material" steps. Reading them top to bottom
+//! is reading the scene.
 
 use crate::color::Color;
 use crate::material::Material;
@@ -15,23 +18,29 @@ use crate::vec3::Vec3;
 
 /// Top block of the town ground and of the hill.
 const GROUND_TOP: i32 = 3;
-const HILL_TOP: i32 = 15;
-/// Diorama footprint: x and z both go from -24 to 23 (48 × 48 blocks).
-const EDGE_MIN: i32 = -24;
-const EDGE_MAX: i32 = 23;
+const HILL_TOP: i32 = 18;
+/// Diorama footprint: x and z both go from -32 to 31 (64 × 64 blocks).
+const EDGE_MIN: i32 = -32;
+const EDGE_MAX: i32 = 31;
+/// Where the hillside starts (last row of the flat hilltop) and ends.
+const SLOPE_START: i32 = -8;
+const SLOPE_END: i32 = 7;
 
 /// Material numbers, so the layout code can say `m.grass` instead of `3`.
 struct Materials {
     grass: usize,
+    petal_grass: usize,
     dirt: usize,
     rock: usize,
+    moss_rock: usize,
     path_stone: usize,
     lacquer: usize,
     shrine_wood: usize,
-    bark: usize,
+    dark_wood: usize,
     roof_tile: usize,
     sakura_light: usize,
     sakura_dark: usize,
+    leaves: usize,
     water: usize,
     sand: usize,
     plaster: usize,
@@ -39,6 +48,9 @@ struct Materials {
     road: usize,
     paper: usize,
     koi: usize,
+    window: usize,
+    awning: usize,
+    concrete: usize,
 }
 
 pub fn build_shrine_scene() -> Scene {
@@ -47,31 +59,43 @@ pub fn build_shrine_scene() -> Scene {
         color: Color::new(1.0, 0.95, 0.85), // warm afternoon sunlight
     };
     let ambient = Color::new(0.32, 0.33, 0.42); // cool, slightly blue sky light
-    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [48, 30, 48], sun, ambient);
+    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [64, 44, 64], sun, ambient);
     let m = add_materials(&mut scene);
     // Pastel afternoon sky. Its painted sun matches `direction_to_sun` above
     // (examples/make_skybox.rs uses the same direction).
     scene.load_skybox();
 
+    // Ground first, then things standing on it, then trees last: trees only
+    // fill empty space, so they never cut into buildings.
     build_terrain(&mut scene, &m);
     build_staircase(&mut scene, &m);
-    build_walkway_and_lanterns(&mut scene, &m);
-    build_torii(&mut scene, &m, -5);
+    build_hilltop_paths(&mut scene, &m);
+    build_torii(&mut scene, &m, 0, SLOPE_START - 2, HILL_TOP + 1, 3, 6); // top of the stairs
+    build_torii(&mut scene, &m, 0, SLOPE_END + 2, GROUND_TOP + 1, 4, 6); // bottom, in town
     build_shrine_hall(&mut scene, &m);
+    build_water_basin(&mut scene, &m, -8, -13);
+    for x in [-3, 3] {
+        build_guardian_statue(&mut scene, &m, x, -13);
+    }
+    for x in [-4, 4] {
+        for z in [-16, -20] {
+            build_stone_lantern(&mut scene, &m, x, z);
+        }
+    }
+    build_edge_wall(&mut scene, &m);
     build_pond_and_bridge(&mut scene, &m);
-    build_cave_rocks(&mut scene, &m);
+    build_cave_hill(&mut scene, &m);
     build_town(&mut scene, &m);
 
-    // Sakura trees: (x, z, ground top, trunk height, canopy radius)
-    for (x, z, ground, trunk, radius) in [
-        (-11, -7, HILL_TOP, 6, 5),
-        (-15, -17, HILL_TOP, 5, 4),
-        (15, -20, HILL_TOP, 5, 4),
-        (18, -3, HILL_TOP, 5, 4),
-        (-7, -13, HILL_TOP, 4, 3),
-        (-20, 19, GROUND_TOP, 3, 3),
-    ] {
+    // Sakura: (x, z, trunk height, canopy radius)
+    for (x, z, trunk, radius) in [(-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4), (-29, 16, 3, 3), (29, 18, 3, 3)] {
+        let ground = surface_top(&scene, x, z);
         build_sakura_tree(&mut scene, &m, x, z, ground, trunk, radius);
+    }
+    // Pines, for deep green contrast next to all the pink.
+    for (x, z, height) in [(-29, -11, 9), (28, -31, 8), (26, 2, 7), (-28, 6, 6)] {
+        let ground = surface_top(&scene, x, z);
+        build_pine_tree(&mut scene, &m, x, z, ground, height);
     }
     scene
 }
@@ -117,22 +141,47 @@ fn add_materials(scene: &mut Scene) -> Materials {
     });
 
     // ================= Supporting materials =================
+    // Grass with fallen petals: same sides as grass, petals on top.
+    let petal_top = scene.load_texture("petal_grass");
+    let petal_grass = scene.add_material(Material {
+        texture_top: petal_top,
+        texture_bottom: dirt_texture,
+        ..Material::opaque(grass_side, 0.9, 0.0, 1.0)
+    });
+    // Mossy rock: moss on top, moss-edged rock on the sides.
+    let moss_side = scene.load_texture("moss_rock");
+    let rock_texture = scene.load_texture("rock");
+    let moss_rock = scene.add_material(Material {
+        texture_top: grass_top,
+        texture_bottom: rock_texture,
+        ..Material::opaque(moss_side, 0.85, 0.02, 4.0)
+    });
+    // Window glass: opaque (the houses are solid), but it mirrors the sky.
+    let window_texture = scene.load_texture("window");
+    let window = scene.add_material(Material {
+        reflectivity: 0.3,
+        ..Material::opaque(window_texture, 0.8, 0.8, 64.0)
+    });
+
     let mut textured = |name: &str, albedo: f32, specular: f32, shininess: f32| {
         let texture = scene.load_texture(name);
         scene.add_material(Material::opaque(texture, albedo, specular, shininess))
     };
     Materials {
         grass,
+        petal_grass,
         dirt: textured("dirt", 0.9, 0.0, 1.0),
         rock: textured("rock", 0.9, 0.05, 8.0),
+        moss_rock,
         path_stone,
         lacquer,
         shrine_wood: textured("shrine_wood", 0.9, 0.05, 8.0),
-        bark: textured("bark", 0.9, 0.0, 1.0),
+        dark_wood: textured("bark", 0.9, 0.0, 1.0),
         roof_tile: textured("roof_tile", 0.9, 0.3, 24.0),
         sakura_light,
         // Same blossom texture, lit a little less, so canopies have two pinks.
         sakura_dark: textured("sakura", 0.75, 0.05, 4.0),
+        leaves: textured("leaves", 0.9, 0.05, 8.0),
         water,
         sand: textured("sand", 0.9, 0.0, 1.0),
         plaster: textured("plaster", 0.9, 0.02, 4.0),
@@ -140,18 +189,26 @@ fn add_materials(scene: &mut Scene) -> Materials {
         road: textured("road", 0.9, 0.0, 1.0),
         paper: textured("paper", 0.95, 0.0, 1.0),
         koi: textured("koi", 0.95, 0.3, 32.0), // wet, slightly shiny scales
+        window,
+        awning: textured("awning", 0.9, 0.05, 8.0),
+        concrete: textured("concrete", 0.9, 0.05, 8.0),
     }
 }
 
-/// Height of the land's top block at depth z: the flat hill top at the back,
-/// a slope in the middle, the flat town at the front.
-fn terrain_top(z: i32) -> i32 {
-    if z <= -3 {
-        HILL_TOP
-    } else {
-        let drop = ((z + 3) as f32 * 0.8).round() as i32;
-        (HILL_TOP - drop).max(GROUND_TOP)
+// ============================ Land ============================
+
+/// Height of the land's top block at (x, z): the flat hilltop at the back,
+/// a steep hillside (one block down per block forward), the flat town.
+/// Away from the stairs, the hillside gets gentle lumps so it looks natural
+/// instead of like a perfect ramp.
+fn terrain_top(x: i32, z: i32) -> i32 {
+    if z <= SLOPE_START {
+        return HILL_TOP;
     }
+    let ramp = HILL_TOP - (z - SLOPE_START);
+    // One random bump value per 3×3 patch: -1, 0 or +1 blocks.
+    let lump = if x.abs() > 4 { (noise(x.div_euclid(3), 7, z.div_euclid(3)) % 3) as i32 - 1 } else { 0 };
+    (ramp + lump).clamp(GROUND_TOP, HILL_TOP)
 }
 
 /// Every column: grass on top, 2 layers of dirt, rock below. Seen from the
@@ -159,7 +216,7 @@ fn terrain_top(z: i32) -> i32 {
 fn build_terrain(scene: &mut Scene, m: &Materials) {
     for x in EDGE_MIN..=EDGE_MAX {
         for z in EDGE_MIN..=EDGE_MAX {
-            let top = terrain_top(z);
+            let top = terrain_top(x, z);
             for y in 0..=top {
                 let material = if y == top {
                     m.grass
@@ -174,138 +231,351 @@ fn build_terrain(scene: &mut Scene, m: &Materials) {
     }
 }
 
-/// The long staircase from the town up to the shrine: 12 steps, each one block
-/// down and one block forward, cut slightly into the slope.
+/// The top block of the ground (highest solid block) in column (x, z).
+fn surface_top(scene: &Scene, x: i32, z: i32) -> i32 {
+    (0..44).rev().find(|&y| scene.blocks.get([x, y, z]).is_some()).unwrap_or(0)
+}
+
+// ============================ The climb ============================
+
+/// The long staircase from the town up to the shrine: 5 blocks wide, one step
+/// per row of the hillside, with low stone walls on both sides topped by
+/// small lanterns every few steps.
 fn build_staircase(scene: &mut Scene, m: &Materials) {
-    for step in 1..=12 {
-        let z = -3 + step;
-        let step_top = HILL_TOP - step;
-        for x in -2..=1 {
-            scene.clear((x, step_top + 1, z), (x, HILL_TOP, z));
+    for z in SLOPE_START + 1..=SLOPE_END {
+        let step_top = HILL_TOP - (z - SLOPE_START);
+        for x in -2..=2 {
+            scene.clear((x, step_top + 1, z), (x, HILL_TOP + 2, z));
             scene.add_block(x, step_top, z, m.path_stone);
         }
-    }
-}
-
-fn build_walkway_and_lanterns(scene: &mut Scene, m: &Materials) {
-    // Stone path from the top of the stairs to the shrine hall.
-    scene.fill((-1, HILL_TOP, -14), (0, HILL_TOP, -3), m.path_stone);
-
-    // Stone lanterns (toro) on both sides of the path.
-    for x in [-4, 3] {
-        for z in [-12, -8] {
-            scene.fill((x, HILL_TOP + 1, z), (x, HILL_TOP + 2, z), m.rock);
-            scene.add_block(x, HILL_TOP + 3, z, m.paper);
-            scene.add_block(x, HILL_TOP + 4, z, m.rock);
+        for x in [-3, 3] {
+            scene.clear((x, step_top + 2, z), (x, HILL_TOP + 2, z));
+            scene.fill((x, step_top, z), (x, step_top + 1, z), m.path_stone);
+            if (z - SLOPE_START) % 4 == 2 {
+                scene.add_block(x, step_top + 2, z, m.paper); // a little lantern on the wall
+            }
         }
     }
 }
 
-/// Torii gate at depth z, standing across the path.
-fn build_torii(scene: &mut Scene, m: &Materials, z: i32) {
-    let base = HILL_TOP + 1;
-    scene.fill((-3, base, z), (-3, base + 4, z), m.lacquer); // left pillar
-    scene.fill((2, base, z), (2, base + 4, z), m.lacquer); // right pillar
-    scene.fill((-2, base + 3, z), (1, base + 3, z), m.lacquer); // lower beam (nuki)
-    scene.fill((-1, base + 4, z), (0, base + 4, z), m.lacquer); // center strut
-    scene.fill((-5, base + 5, z), (4, base + 5, z), m.lacquer); // top beam (kasagi)
-    scene.add_block(-5, base + 6, z, m.lacquer); // upturned ends
-    scene.add_block(4, base + 6, z, m.lacquer);
+/// A low stone wall along the front edge of the hilltop, with red posts,
+/// leaving a gap where the stairs arrive.
+fn build_edge_wall(scene: &mut Scene, m: &Materials) {
+    for x in EDGE_MIN + 2..=EDGE_MAX - 2 {
+        if x.abs() <= 3 {
+            continue;
+        }
+        scene.add_block(x, HILL_TOP + 1, SLOPE_START, m.path_stone);
+        if x % 4 == 0 {
+            scene.add_block(x, HILL_TOP + 2, SLOPE_START, m.lacquer);
+        }
+    }
+}
+
+// ============================ The shrine ============================
+
+/// Stone paths on the hilltop: the main approach to the hall, a plaza in
+/// front of it, a side path to the red bridge, and the winding trail to the cave.
+fn build_hilltop_paths(scene: &mut Scene, m: &Materials) {
+    scene.fill((-1, HILL_TOP, -21), (1, HILL_TOP, SLOPE_START), m.path_stone); // main approach
+    scene.fill((-5, HILL_TOP, -22), (5, HILL_TOP, -19), m.path_stone); // plaza
+    scene.fill((6, HILL_TOP, -20), (7, HILL_TOP, -18), m.path_stone); // plaza → bridge
+
+    // The cave trail: 2-wide stepping stones through a list of turning points.
+    let turns: [(i32, i32); 5] = [(-3, -10), (-11, -9), (-18, -13), (-22, -19), (-23, -23)];
+    for pair in turns.windows(2) {
+        let ((x0, z0), (x1, z1)) = (pair[0], pair[1]);
+        let steps = (x1 - x0).abs().max((z1 - z0).abs());
+        for i in 0..=steps {
+            let x = x0 + (x1 - x0) * i / steps;
+            let z = z0 + (z1 - z0) * i / steps;
+            for (dx, dz) in [(0, 0), (1, 0), (0, 1)] {
+                // Skip a few stones so it reads as a trail, not a road.
+                if noise(x + dx, 3, z + dz) > 15 {
+                    scene.add_block(x + dx, HILL_TOP, z + dz, m.path_stone);
+                }
+            }
+        }
+    }
+}
+
+/// Torii gate centered on x = `center_x` at depth z. `half_width` is the
+/// distance from the center to each pillar; `height` is the pillar height.
+fn build_torii(scene: &mut Scene, m: &Materials, center_x: i32, z: i32, base: i32, half_width: i32, height: i32) {
+    let (left, right) = (center_x - half_width, center_x + half_width);
+    let top = base + height - 1;
+    scene.fill((left, base, z), (left, top, z), m.lacquer); // pillars
+    scene.fill((right, base, z), (right, top, z), m.lacquer);
+    scene.fill((left + 1, top - 1, z), (right - 1, top - 1, z), m.lacquer); // lower beam (nuki)
+    scene.add_block(center_x, top, z, m.lacquer); // center strut
+    scene.fill((left - 2, top + 1, z), (right + 2, top + 1, z), m.dark_wood); // top beam (kasagi), dark cap
+    scene.add_block(left - 2, top + 2, z, m.dark_wood); // upturned ends
+    scene.add_block(right + 2, top + 2, z, m.dark_wood);
 }
 
 /// A gable roof over the box x0..=x1, z0..=z1, starting at height `y`.
 /// Each layer is one block higher and one block narrower front-to-back,
 /// until it meets at the ridge (which runs left-right along X).
-fn build_gable_roof(scene: &mut Scene, material: usize, x0: i32, x1: i32, z0: i32, z1: i32, y: i32) {
+fn build_gable_roof(scene: &mut Scene, material: usize, x0: i32, x1: i32, z0: i32, z1: i32, y: i32) -> i32 {
     let mut layer = 0;
     while z0 - 1 + layer <= z1 + 1 - layer {
         scene.fill((x0 - 1, y + layer, z0 - 1 + layer), (x1 + 1, y + layer, z1 + 1 - layer), material);
         layer += 1;
     }
+    y + layer - 1 // height of the ridge
 }
 
+/// The main hall: a raised stone base, a wooden veranda all around, walls of
+/// wood with paper (shoji) panels between red posts, and a big tiled roof.
 fn build_shrine_hall(scene: &mut Scene, m: &Materials) {
-    let floor = HILL_TOP + 1;
-    scene.fill((-6, floor, -22), (5, floor, -15), m.path_stone); // raised stone base
-    scene.fill((-5, floor + 1, -21), (4, floor + 3, -16), m.shrine_wood); // hall body
-    // Red lacquered posts at the front corners and entrance.
-    for x in [-5, -2, 1, 4] {
-        scene.fill((x, floor + 1, -16), (x, floor + 3, -16), m.lacquer);
+    let base = HILL_TOP + 1;
+    scene.fill((-9, base, -31), (9, base, -22), m.path_stone); // stone base
+    scene.fill((-2, base, -21), (2, base, -21), m.path_stone); // front step
+    scene.fill((-8, base + 1, -30), (8, base + 1, -23), m.shrine_wood); // veranda floor
+    scene.fill((-2, base + 1, -22), (2, base + 1, -22), m.shrine_wood); // entrance step
+
+    // Walls (4 high), then the front facade drawn over them.
+    let (wall_bottom, wall_top) = (base + 2, base + 5);
+    scene.fill((-6, wall_bottom, -29), (6, wall_top, -25), m.shrine_wood);
+    for x in -6..=6 {
+        if [-6, -3, 3, 6].contains(&x) {
+            scene.fill((x, wall_bottom, -25), (x, wall_top, -25), m.lacquer); // posts
+        } else if x.abs() <= 2 {
+            scene.fill((x, wall_bottom, -25), (x, wall_top - 1, -25), m.paper); // sliding doors
+        } else {
+            scene.fill((x, wall_bottom + 1, -25), (x, wall_top - 1, -25), m.paper); // windows
+        }
     }
-    build_gable_roof(scene, m.roof_tile, -6, 5, -22, -15, floor + 4);
+    for x in [-6, 6] {
+        scene.fill((x, wall_bottom + 1, -28), (x, wall_top - 1, -26), m.paper); // side windows
+    }
+    // Veranda posts holding up the roof.
+    for (x, z) in [(-8, -23), (8, -23), (-4, -23), (4, -23), (-8, -30), (8, -30)] {
+        scene.fill((x, wall_bottom, z), (x, wall_top, z), m.lacquer);
+    }
+    // Offering box in front of the doors.
+    scene.fill((-1, wall_bottom, -23), (1, wall_bottom, -23), m.dark_wood);
+
+    let ridge = build_gable_roof(scene, m.roof_tile, -8, 8, -30, -23, wall_top + 1);
+    // Ridge ornaments at both ends.
+    for x in [-9, 9] {
+        scene.fill((x, ridge + 1, -27), (x, ridge + 1, -26), m.dark_wood);
+    }
 }
 
+/// Temizuya: a stone basin of water under a small roof on four red posts.
+fn build_water_basin(scene: &mut Scene, m: &Materials, center_x: i32, center_z: i32) {
+    let y = HILL_TOP + 1;
+    scene.fill((center_x - 1, y, center_z - 1), (center_x + 1, y, center_z + 1), m.rock);
+    scene.add_block(center_x, y, center_z, m.water);
+    for (dx, dz) in [(-2, -2), (2, -2), (-2, 2), (2, 2)] {
+        scene.fill((center_x + dx, y, center_z + dz), (center_x + dx, y + 2, center_z + dz), m.lacquer);
+    }
+    // Small pyramid roof: each layer one block smaller on every side.
+    for layer in 0..3 {
+        let r = 3 - layer;
+        scene.fill((center_x - r, y + 3 + layer, center_z - r), (center_x + r, y + 3 + layer, center_z + r), m.roof_tile);
+    }
+}
+
+/// Komainu (guardian lion-dog) on a pedestal, facing the path.
+fn build_guardian_statue(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
+    let y = HILL_TOP + 1;
+    scene.add_block(x, y, z, m.rock); // pedestal
+    scene.fill((x, y + 1, z - 1), (x, y + 1, z), m.path_stone); // body (sitting, 2 long)
+    scene.add_block(x, y + 2, z, m.path_stone); // head
+}
+
+/// Stone lantern (toro): base, post, glowing paper light box, stone cap.
+fn build_stone_lantern(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
+    let y = HILL_TOP + 1;
+    scene.fill((x, y, z), (x, y + 1, z), m.rock);
+    scene.add_block(x, y + 2, z, m.paper);
+    scene.add_block(x, y + 3, z, m.path_stone);
+}
+
+// ============================ Pond and cave ============================
+
+/// Koi pond (an oval 3 blocks deep) with rocks, koi, lily pads, and an
+/// arched red bridge with railings across the middle.
 fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
-    let (center_x, center_z, radius) = (11.0, -10.0, 4.5);
-    for x in 6..=16 {
-        for z in -15..=-5 {
-            let dx = (x as f32 + 0.5 - center_x) / radius;
-            let dz = (z as f32 + 0.5 - center_z) / radius;
+    let (center_x, center_z, radius_x, radius_z) = (15.0, -16.0, 7.5, 5.5);
+    for x in 7..=23 {
+        for z in -22..=-10 {
+            let dx = (x as f32 + 0.5 - center_x) / radius_x;
+            let dz = (z as f32 + 0.5 - center_z) / radius_z;
             if dx * dx + dz * dz <= 1.0 {
-                scene.remove_block(x, HILL_TOP, z); // pond surface sits 1 below the grass
-                scene.fill((x, HILL_TOP - 3, z), (x, HILL_TOP - 1, z), m.water); // 3 deep
+                scene.remove_block(x, HILL_TOP, z); // water surface sits 1 below the grass
+                scene.fill((x, HILL_TOP - 3, z), (x, HILL_TOP - 1, z), m.water);
                 scene.add_block(x, HILL_TOP - 4, z, m.sand);
             }
         }
     }
-    // Rocks standing on the pond floor, their tops just under the surface.
-    scene.fill((13, HILL_TOP - 3, -7), (13, HILL_TOP - 1, -7), m.rock);
-    scene.fill((8, HILL_TOP - 3, -12), (8, HILL_TOP - 1, -12), m.rock);
+    // Rocks on the pond floor, tops just under (or poking out of) the surface.
+    scene.fill((11, HILL_TOP - 3, -20), (11, HILL_TOP - 1, -20), m.rock);
+    scene.fill((19, HILL_TOP - 3, -13), (20, HILL_TOP - 2, -13), m.rock);
+    scene.add_block(18, HILL_TOP - 3, -19, m.rock);
+    // Lily pads floating on the surface.
+    for (x, z) in [(9, -14), (21, -18), (13, -12)] {
+        scene.add_block(x, HILL_TOP - 1, z, m.leaves);
+    }
+    // Koi, at two depths, pointing in different directions.
+    scene.fill((12, HILL_TOP - 2, -14), (13, HILL_TOP - 2, -14), m.koi);
+    scene.fill((16, HILL_TOP - 3, -15), (16, HILL_TOP - 3, -13), m.koi);
+    scene.fill((10, HILL_TOP - 3, -16), (11, HILL_TOP - 3, -16), m.koi);
+    scene.fill((20, HILL_TOP - 2, -16), (21, HILL_TOP - 2, -16), m.koi);
 
-    // Koi swimming underwater: they are what refraction lets you see (and bend).
-    scene.fill((9, HILL_TOP - 2, -8), (10, HILL_TOP - 2, -8), m.koi); // along X
-    scene.fill((13, HILL_TOP - 3, -13), (13, HILL_TOP - 3, -11), m.koi); // along Z, deeper
-    scene.fill((10, HILL_TOP - 2, -12), (11, HILL_TOP - 2, -12), m.koi);
-
-    // Arched wooden bridge across the pond (along X at z = -10).
-    for x in 6..=16 {
-        let height = if (8..=14).contains(&x) { HILL_TOP + 1 } else { HILL_TOP };
-        scene.add_block(x, height, -10, m.shrine_wood);
+    // Arched bridge along X near the back of the pond (z = -19), so the koi in
+    // front stay visible: rises by one block twice toward the middle.
+    for x in 6..=24 {
+        let from_end = (x - 6).min(24 - x);
+        let deck = HILL_TOP + 1 + (from_end / 2).min(2);
+        scene.add_block(x, deck, -19, m.shrine_wood);
+        for z in [-20, -18] {
+            scene.add_block(x, deck, z, m.shrine_wood);
+            scene.add_block(x, deck + 1, z, m.lacquer); // red railings
+        }
     }
 }
 
-/// Rock outcrop in the back-left corner, with a low opening (the future cave).
-fn build_cave_rocks(scene: &mut Scene, m: &Materials) {
-    for x in -24..=-18 {
-        for z in -24..=-18 {
-            let distance_from_corner = (x + 24).max(z + 24);
-            let height = 5 - distance_from_corner / 2;
-            scene.fill((x, HILL_TOP + 1, z), (x, HILL_TOP + height, z), m.rock);
+/// A mossy rock hill in the back-left corner, with a tunnel leading to a
+/// small hidden chamber (the portal goes there later).
+fn build_cave_hill(scene: &mut Scene, m: &Materials) {
+    for x in EDGE_MIN..=-16 {
+        for z in EDGE_MIN..=-16 {
+            // Tallest at the corner, sloping down toward the shrine grounds.
+            // The square root rounds the top off, so it's a mound, not a cone.
+            let distance = (((x - EDGE_MIN) * (x - EDGE_MIN) + (z - EDGE_MIN) * (z - EDGE_MIN)) as f32).sqrt();
+            let rise = (1.0 - distance / 17.0).max(0.0).sqrt() * 10.0;
+            let height = (rise + (noise(x, 5, z) % 2) as f32).floor() as i32;
+            if height <= 0 {
+                continue;
+            }
+            scene.fill((x, HILL_TOP + 1, z), (x, HILL_TOP + height - 1, z), m.rock);
+            scene.add_block(x, HILL_TOP + height, z, m.moss_rock);
         }
     }
-    scene.clear((-20, HILL_TOP + 1, -21), (-18, HILL_TOP + 2, -20)); // cave mouth
+    // Tunnel along the diagonal from the trail's end toward the corner,
+    // 3 wide and 3 tall, opening into a 5×5×4 chamber.
+    for i in 0..6 {
+        let (x, z) = (-23 - i, -23 - i);
+        scene.clear((x - 1, HILL_TOP + 1, z), (x + 1, HILL_TOP + 3, z));
+        scene.clear((x, HILL_TOP + 1, z - 1), (x, HILL_TOP + 3, z + 1));
+    }
+    scene.clear((-30, HILL_TOP + 1, -30), (-26, HILL_TOP + 4, -26));
+    // Hanging moss over the entrance.
+    for (x, z) in [(-22, -24), (-24, -22), (-23, -23)] {
+        scene.add_block_if_empty(x, HILL_TOP + 3, z, m.leaves);
+    }
+}
+
+// ============================ Town ============================
+
+struct House {
+    x0: i32,
+    z0: i32,
+    x1: i32,
+    z1: i32,
+    floors: i32,
+    walls: usize,
+    roof: usize,
+    /// A shop has a wide front window and a striped awning.
+    shop: bool,
+    /// True: the door is on the +Z side; false: on the -Z side (facing the street).
+    door_toward_front: bool,
 }
 
 fn build_town(scene: &mut Scene, m: &Materials) {
-    // Streets: one running from the stairs to the front, one crossing it.
-    // First cut through the bottom of the slope so the stairs meet the street.
-    scene.clear((-2, GROUND_TOP + 1, 10), (1, HILL_TOP, 11));
-    scene.fill((-2, GROUND_TOP, 10), (1, GROUND_TOP, EDGE_MAX), m.road);
-    scene.fill((EDGE_MIN, GROUND_TOP, 17), (EDGE_MAX, GROUND_TOP, 18), m.road);
+    // Streets: one from the bottom of the stairs to the front edge, one crossing it.
+    scene.fill((-3, GROUND_TOP, SLOPE_END + 1), (3, GROUND_TOP, EDGE_MAX), m.road);
+    scene.fill((EDGE_MIN, GROUND_TOP, 20), (EDGE_MAX, GROUND_TOP, 22), m.road);
 
-    // Houses and shops: (x0, z0, x1, z1)
-    for (x0, z0, x1, z1) in [
-        (-10, 12, -5, 15),
-        (-20, 12, -13, 15),
-        (4, 12, 9, 15),
-        (12, 12, 19, 15),
-        (-12, 20, -5, 22),
-        (5, 20, 12, 22),
-        (-21, 20, -15, 22),
+    let house = |x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front| House {
+        x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
+    };
+    for spec in [
+        house(-14, 11, -6, 17, 2, m.plaster, m.house_roof, false, true),
+        house(-26, 11, -17, 17, 1, m.shrine_wood, m.roof_tile, true, true),
+        house(-13, 24, -6, 30, 2, m.plaster, m.roof_tile, false, false),
+        house(-27, 24, -18, 30, 1, m.plaster, m.house_roof, true, false),
+        house(6, 11, 14, 17, 2, m.plaster, m.house_roof, false, true),
+        house(17, 11, 27, 17, 1, m.shrine_wood, m.roof_tile, true, true),
+        house(6, 24, 14, 30, 1, m.plaster, m.house_roof, true, false),
+        house(17, 24, 26, 30, 2, m.shrine_wood, m.house_roof, false, false),
     ] {
-        scene.fill((x0, GROUND_TOP + 1, z0), (x1, GROUND_TOP + 3, z1), m.plaster);
-        build_gable_roof(scene, m.house_roof, x0, x1, z0, z1, GROUND_TOP + 4);
+        build_house(scene, m, &spec);
     }
 
-    // Utility poles along the main street.
-    for (x, z) in [(2, 13), (2, 21), (-3, 19)] {
-        scene.fill((x, GROUND_TOP + 1, z), (x, GROUND_TOP + 7, z), m.bark);
+    // Concrete utility poles along the main street, with a crossarm on top.
+    for (x, z) in [(4, 13), (4, 27), (-4, 17), (-4, 25)] {
+        scene.fill((x, GROUND_TOP + 1, z), (x, GROUND_TOP + 8, z), m.concrete);
+        scene.fill((x - 1, GROUND_TOP + 7, z), (x + 1, GROUND_TOP + 7, z), m.concrete);
     }
 }
 
+fn build_house(scene: &mut Scene, m: &Materials, h: &House) {
+    let floor_height = 3;
+    let bottom = GROUND_TOP + 1;
+    let top = GROUND_TOP + floor_height * h.floors;
+    scene.fill((h.x0, bottom, h.z0), (h.x1, top, h.z1), h.walls);
+
+    for floor in 0..h.floors {
+        let floor_bottom = bottom + floor * floor_height;
+        // A wooden band between floors on plaster houses.
+        if floor > 0 && h.walls == m.plaster {
+            for x in h.x0..=h.x1 {
+                scene.add_block(x, floor_bottom, h.z0, m.shrine_wood);
+                scene.add_block(x, floor_bottom, h.z1, m.shrine_wood);
+            }
+        }
+        // Windows every other block, all around, in the middle of each floor.
+        let y = floor_bottom + 1;
+        for x in (h.x0 + 1..h.x1).step_by(2) {
+            scene.add_block(x, y, h.z0, m.window);
+            scene.add_block(x, y, h.z1, m.window);
+        }
+        for z in (h.z0 + 1..h.z1).step_by(2) {
+            scene.add_block(h.x0, y, z, m.window);
+            scene.add_block(h.x1, y, z, m.window);
+        }
+    }
+
+    // Door (and shop front) on the side facing the street.
+    let (front_z, outside_z) = if h.door_toward_front { (h.z1, h.z1 + 1) } else { (h.z0, h.z0 - 1) };
+    if h.shop {
+        scene.fill((h.x0 + 1, bottom + 1, front_z), (h.x1 - 1, bottom + 1, front_z), m.window);
+        scene.fill((h.x0, bottom + 2, outside_z), (h.x1, bottom + 2, outside_z), m.awning);
+    }
+    let door_x = (h.x0 + h.x1) / 2;
+    scene.fill((door_x, bottom, front_z), (door_x, bottom + 1, front_z), m.dark_wood);
+
+    build_gable_roof(scene, h.roof, h.x0, h.x1, h.z0, h.z1, top + 1);
+}
+
+// ============================ Trees ============================
+
 fn build_sakura_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i32, trunk_height: i32, radius: i32) {
+    // Fallen petals on the grass around the tree (before the trunk goes in).
+    for dx in -radius - 2..=radius + 2 {
+        for dz in -radius - 2..=radius + 2 {
+            let (px, pz) = (x + dx, z + dz);
+            if dx * dx + dz * dz > (radius + 2) * (radius + 2) || !scene.blocks.contains([px, 0, pz]) {
+                continue;
+            }
+            let top = surface_top(scene, px, pz);
+            if scene.blocks.get([px, top, pz]) == Some(m.grass as u8) && noise(px, top, pz) < 55 {
+                scene.add_block(px, top, pz, m.petal_grass);
+            }
+        }
+    }
+
     let trunk_top = ground + trunk_height;
-    scene.fill((x, ground + 1, z), (x, trunk_top, z), m.bark);
+    scene.fill((x, ground + 1, z), (x, trunk_top, z), m.dark_wood);
+    // A few branches leaning out from the upper trunk.
+    for (bx, bz) in [(1, 0), (-1, 1), (0, -1)] {
+        scene.add_block(x + bx, trunk_top - 1, z + bz, m.dark_wood);
+        scene.add_block(x + 2 * bx, trunk_top, z + 2 * bz, m.dark_wood);
+    }
 
     // Canopy: a squashed ball of blossoms, with random gaps and two pinks.
     let r = radius as f32;
@@ -314,7 +584,7 @@ fn build_sakura_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i
             for dz in -radius..=radius {
                 let squashed_dy = dy as f32 * 1.4; // wider than tall
                 let distance = ((dx * dx + dz * dz) as f32 + squashed_dy * squashed_dy).sqrt();
-                let (bx, by, bz) = (x + dx, trunk_top + dy, z + dz);
+                let (bx, by, bz) = (x + dx, trunk_top + 1 + dy, z + dz);
                 let roll = noise(bx, by, bz);
                 // Near the edge, leave random gaps so the outline looks fluffy.
                 if distance > r || (distance > r - 1.2 && roll < 35) {
@@ -325,6 +595,23 @@ fn build_sakura_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i
             }
         }
     }
+}
+
+/// A pine: a trunk with stacked rings of needles, wide at the bottom and
+/// narrowing to a point.
+fn build_pine_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i32, height: i32) {
+    scene.fill((x, ground + 1, z), (x, ground + height - 1, z), m.dark_wood);
+    for level in 2..=height {
+        let radius = ((height - level) / 2).min(3);
+        for dx in -radius..=radius {
+            for dz in -radius..=radius {
+                if dx * dx + dz * dz <= radius * radius + 1 {
+                    scene.add_block_if_empty(x + dx, ground + level, z + dz, m.leaves);
+                }
+            }
+        }
+    }
+    scene.add_block_if_empty(x, ground + height + 1, z, m.leaves);
 }
 
 /// A repeatable "random" number from 0 to 99 for a block position.
