@@ -5,19 +5,40 @@ use crate::framebuffer::Framebuffer;
 use crate::ray::Ray;
 use crate::scene::Scene;
 use crate::vec3::Vec3;
+use std::sync::Mutex;
 
 /// How far to push a new ray's start off the surface, so it does not
 /// immediately re-hit the surface it starts on (see `is_in_shadow`).
 const SURFACE_OFFSET: f32 = 1e-3;
 
-/// Shoots one ray per pixel and stores the color it sees.
+/// Shoots one ray per pixel and stores the color it sees, using every CPU core.
+///
+/// Rows are handed out one at a time from a shared queue (the Mutex): each
+/// thread grabs the next unfinished row, renders it, and comes back for more.
+/// Rows full of sky are fast and rows full of scene are slow, so this keeps
+/// every core busy until the very end instead of some finishing early.
 pub fn render_frame(framebuffer: &mut Framebuffer, camera: &Camera, scene: &Scene, show_normals: bool) {
-    for y in 0..framebuffer.height {
-        for x in 0..framebuffer.width {
-            let ray = camera.ray_for_pixel(x, y, framebuffer.width, framebuffer.height);
-            framebuffer.set_pixel(x, y, shade_ray(&ray, scene, show_normals));
+    let (width, height) = (framebuffer.width, framebuffer.height);
+    let rows = Mutex::new(framebuffer.rows_mut());
+    let thread_count = std::thread::available_parallelism().map_or(1, |count| count.get());
+
+    // `scope` guarantees all threads finish before render_frame returns,
+    // which is what lets them safely borrow the camera, scene and rows.
+    std::thread::scope(|scope| {
+        for _ in 0..thread_count {
+            scope.spawn(|| {
+                loop {
+                    let Some((y, row)) = rows.lock().unwrap().next() else {
+                        break; // no rows left
+                    };
+                    for (x, pixel) in row.iter_mut().enumerate() {
+                        let ray = camera.ray_for_pixel(x, y, width, height);
+                        *pixel = shade_ray(&ray, scene, show_normals);
+                    }
+                }
+            });
         }
-    }
+    });
 }
 
 fn shade_ray(ray: &Ray, scene: &Scene, show_normals: bool) -> Color {

@@ -22,9 +22,11 @@ impl Framebuffer {
         }
     }
 
-    pub fn set_pixel(&mut self, x: usize, y: usize, color: Color) {
-        let index = y * self.width + x;
-        self.pixels[index] = color;
+    /// Splits the image into rows: (row number y, that row's pixels).
+    /// Each row is a separate mutable slice, so different threads can fill
+    /// different rows at the same time without touching each other's memory.
+    pub fn rows_mut(&mut self) -> impl Iterator<Item = (usize, &mut [Color])> {
+        self.pixels.chunks_mut(self.width).enumerate()
     }
 
     /// 32-bit format Windows expects when we copy the image to the window.

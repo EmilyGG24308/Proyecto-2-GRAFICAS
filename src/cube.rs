@@ -25,6 +25,13 @@ impl Cube {
         Cube { min, max, material }
     }
 
+    /// True if `point` is inside the box (or on its surface).
+    pub fn contains(&self, point: Vec3) -> bool {
+        point.x >= self.min.x && point.x <= self.max.x
+            && point.y >= self.min.y && point.y <= self.max.y
+            && point.z >= self.min.z && point.z <= self.max.z
+    }
+
     /// Slab method. A box is the overlap of three "slabs" (the space between two
     /// parallel planes) along X, Y and Z. For each slab we find the t where the
     /// ray enters and leaves it. The ray is inside the box only while it is inside

@@ -11,3 +11,9 @@ pub struct Material {
     /// How small and sharp the highlight is. ~8 = broad soft shine, ~64 = tight spot.
     pub shininess: f32,
 }
+
+impl Material {
+    pub const fn new(albedo: Color, specular_strength: f32, shininess: f32) -> Material {
+        Material { albedo, specular_strength, shininess }
+    }
+}

@@ -2,11 +2,13 @@ mod camera;
 mod color;
 mod cube;
 mod framebuffer;
+mod grid;
 mod material;
 mod platform;
 mod ray;
 mod renderer;
 mod scene;
+mod shrine;
 mod vec3;
 
 use camera::Camera;
@@ -28,11 +30,12 @@ const WINDOW_TITLE: &str = "Mikage Shrine Raytracer";
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
     let camera = Camera {
-        position: Vec3::new(9.0, 8.0, 13.0),
-        target: Vec3::new(0.0, 2.0, 0.0),
-        vertical_fov_degrees: 50.0,
+        position: Vec3::new(44.0, 40.0, 50.0),
+        target: Vec3::new(0.0, 9.0, -2.0),
+        vertical_fov_degrees: 40.0,
     };
-    let scene = scene::build_test_scene();
+    let scene = shrine::build_shrine_scene();
+    let block_count = scene.blocks.block_count();
     // N key (or --normals) shows each face's normal as a color, to check the faces.
     let mut show_normals = std::env::args().any(|argument| argument == "--normals");
 
@@ -83,7 +86,7 @@ fn main() {
         let elapsed = last_title_update.elapsed().as_secs_f32();
         if elapsed >= 0.5 {
             let fps = frames_since_title_update as f32 / elapsed;
-            window.set_title(&format!("{WINDOW_TITLE} — {fps:.0} FPS"));
+            window.set_title(&format!("{WINDOW_TITLE} — {fps:.0} FPS — {block_count} blocks"));
             frames_since_title_update = 0;
             last_title_update = Instant::now();
         }
