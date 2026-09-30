@@ -2,6 +2,7 @@ mod camera;
 mod color;
 mod controls;
 mod cube;
+mod cubemap;
 mod framebuffer;
 mod grid;
 mod material;

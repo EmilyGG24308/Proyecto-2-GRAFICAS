@@ -272,15 +272,23 @@ fn normal_as_color(hit: &Hit) -> Color {
     Color::new(n.x * 0.5 + 0.5, n.y * 0.5 + 0.5, n.z * 0.5 + 0.5)
 }
 
-/// Temporary sky gradient (the real skybox comes in Phase 8):
-/// pink at the horizon, blue straight up.
-/// The sky seen along a diorama-space direction. The sky belongs to the world,
-/// not the diorama, so turn the direction back into world space first:
-/// spinning the diorama must not spin the clouds.
+/// What a ray sees when it misses every block, by DIRECTION only (never by
+/// position): the sky is "infinitely far away", so moving the camera never
+/// gets you closer to it, but turning does change what you see.
+///
+/// Used for camera rays AND for reflected/refracted rays, which is why the
+/// clouds appear mirrored in the pond.
+///
+/// The sky belongs to the world, not the diorama, so the diorama-space
+/// direction is turned back into world space first: spinning the diorama
+/// must not spin the clouds.
 fn sky(scene: &Scene, diorama_direction: Vec3) -> Color {
-    sky_color(scene.to_world_direction(diorama_direction))
+    let world_direction = scene.to_world_direction(diorama_direction);
+    scene.skybox_color(world_direction).unwrap_or_else(|| sky_color(world_direction))
 }
 
+/// Fallback when no skybox is loaded (and used by the tests):
+/// a plain gradient, pink at the horizon, blue straight up.
 fn sky_color(direction: Vec3) -> Color {
     let horizon = Color::new(1.0, 0.8, 0.88);
     let zenith = Color::new(0.45, 0.65, 1.0);

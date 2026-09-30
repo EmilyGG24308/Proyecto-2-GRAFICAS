@@ -1,5 +1,6 @@
 use crate::color::Color;
 use crate::cube::Hit;
+use crate::cubemap;
 use crate::grid::{BlockGrid, Boundary};
 use crate::material::Material;
 use crate::ray::Ray;
@@ -37,6 +38,9 @@ pub struct Scene {
     turn_sin: f32,
     /// The sun direction as seen from inside the turned diorama.
     local_sun_direction: Vec3,
+    /// Texture numbers of the six skybox faces (+X, -X, +Y, -Y, +Z, -Z),
+    /// or None to fall back to a plain gradient.
+    skybox_faces: Option<[usize; 6]>,
 }
 
 impl Scene {
@@ -59,7 +63,21 @@ impl Scene {
             turn_cos: 1.0,
             turn_sin: 0.0,
             local_sun_direction,
+            skybox_faces: None,
         }
+    }
+
+    /// Loads the six skybox faces (assets/textures/sky_px.bmp, sky_nx.bmp, ...).
+    pub fn load_skybox(&mut self) {
+        self.skybox_faces = Some(cubemap::FACE_NAMES.map(|name| self.load_texture(name)));
+    }
+
+    /// The sky seen looking in WORLD direction `direction` (any length).
+    /// Returns None if this scene has no skybox loaded.
+    pub fn skybox_color(&self, direction: Vec3) -> Option<Color> {
+        let faces = self.skybox_faces?;
+        let (face, u, v) = cubemap::face_and_uv(direction.x, direction.y, direction.z);
+        Some(self.textures[faces[face]].sample(u, v))
     }
 
     /// Turns the diorama to `angle` radians (positive = counterclockwise seen from above).

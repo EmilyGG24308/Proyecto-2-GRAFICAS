@@ -49,6 +49,9 @@ pub fn build_shrine_scene() -> Scene {
     let ambient = Color::new(0.32, 0.33, 0.42); // cool, slightly blue sky light
     let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [48, 30, 48], sun, ambient);
     let m = add_materials(&mut scene);
+    // Pastel afternoon sky. Its painted sun matches `direction_to_sun` above
+    // (examples/make_skybox.rs uses the same direction).
+    scene.load_skybox();
 
     build_terrain(&mut scene, &m);
     build_staircase(&mut scene, &m);
