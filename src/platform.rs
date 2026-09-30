@@ -9,10 +9,25 @@ use std::ptr::{null, null_mut};
 type Handle = *mut c_void;
 
 /// Virtual-key codes for the keys we care about.
+/// (Letters and digits use their ASCII code.)
 pub mod key {
     pub const ESCAPE: usize = 0x1B;
+    pub const SPACE: usize = 0x20;
+    pub const SHIFT: usize = 0x10;
     pub const F12: usize = 0x7B;
+    pub const A: usize = 0x41;
+    pub const D: usize = 0x44;
+    pub const E: usize = 0x45;
     pub const N: usize = 0x4E;
+    pub const Q: usize = 0x51;
+    pub const R: usize = 0x52;
+    pub const S: usize = 0x53;
+    pub const W: usize = 0x57;
+    /// The +/= and -/_ keys on the main keyboard, and + and - on the number pad.
+    pub const PLUS: usize = 0xBB;
+    pub const MINUS: usize = 0xBD;
+    pub const NUMPAD_PLUS: usize = 0x6B;
+    pub const NUMPAD_MINUS: usize = 0x6D;
 }
 
 // Message and flag values, copied from the Windows headers.
@@ -20,6 +35,10 @@ const WM_DESTROY: u32 = 0x0002;
 const WM_QUIT: u32 = 0x0012;
 const WM_KEYDOWN: u32 = 0x0100;
 const WM_SYSKEYDOWN: u32 = 0x0104;
+const WM_LBUTTONDOWN: u32 = 0x0201;
+const WM_MOUSEWHEEL: u32 = 0x020A;
+/// One "notch" of a normal mouse wheel.
+pub const WHEEL_NOTCH: i32 = 120;
 const PM_REMOVE: u32 = 0x0001;
 const CS_OWNDC: u32 = 0x0020;
 const WS_VISIBLE: u32 = 0x1000_0000;
@@ -57,6 +76,12 @@ struct Message {
     cursor_x: i32,
     cursor_y: i32,
     private: u32,
+}
+
+#[repr(C)]
+struct Point {
+    x: i32,
+    y: i32,
 }
 
 #[repr(C)]
@@ -121,6 +146,12 @@ unsafe extern "system" {
     fn LoadCursorW(instance: Handle, name: *const u16) -> Handle;
     fn GetDC(window: Handle) -> Handle;
     fn SetWindowTextW(window: Handle, text: *const u16) -> i32;
+    fn GetForegroundWindow() -> Handle;
+    fn GetAsyncKeyState(key: i32) -> i16;
+    fn GetCursorPos(point: *mut Point) -> i32;
+    fn SetCursorPos(x: i32, y: i32) -> i32;
+    fn ClientToScreen(window: Handle, point: *mut Point) -> i32;
+    fn ShowCursor(show: i32) -> i32;
 }
 
 #[link(name = "gdi32")]
@@ -178,6 +209,14 @@ pub struct Window {
     keys_pressed: [bool; 256],
     /// Reused buffer of packed 0x00RRGGBB pixels handed to Windows.
     display_pixels: Vec<u32>,
+    /// While captured, the cursor is hidden and pinned to the window center,
+    /// and every frame we measure how far the mouse tried to move.
+    mouse_captured: bool,
+    mouse_delta: (i32, i32),
+    /// Wheel movement this frame: +120 per notch away from you, -120 toward you.
+    wheel_delta: i32,
+    /// Where the left button was clicked this frame (client pixels), if at all.
+    left_click: Option<(i32, i32)>,
 }
 
 impl Window {
@@ -242,6 +281,10 @@ impl Window {
                 client_height,
                 keys_pressed: [false; 256],
                 display_pixels: Vec::new(),
+                mouse_captured: false,
+                mouse_delta: (0, 0),
+                wheel_delta: 0,
+                left_click: None,
             })
         }
     }
@@ -250,6 +293,8 @@ impl Window {
     /// Returns false once the window has been closed.
     pub fn process_events(&mut self) -> bool {
         self.keys_pressed = [false; 256];
+        self.wheel_delta = 0;
+        self.left_click = None;
         let mut message: Message = unsafe { std::mem::zeroed() };
 
         while unsafe { PeekMessageW(&mut message, null_mut(), 0, 0, PM_REMOVE) } != 0 {
@@ -263,11 +308,36 @@ impl Window {
                         self.keys_pressed[message.w_param & 0xFF] = true;
                     }
                 }
+                WM_MOUSEWHEEL => {
+                    // The wheel amount is a signed 16-bit number in the high half of w_param.
+                    self.wheel_delta += ((message.w_param >> 16) & 0xFFFF) as u16 as i16 as i32;
+                }
+                WM_LBUTTONDOWN => {
+                    // Click position: low and high 16 bits of l_param, in client pixels.
+                    let x = (message.l_param & 0xFFFF) as u16 as i16 as i32;
+                    let y = ((message.l_param >> 16) & 0xFFFF) as u16 as i16 as i32;
+                    self.left_click = Some((x, y));
+                }
                 _ => {}
             }
             unsafe {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
+            }
+        }
+
+        self.mouse_delta = (0, 0);
+        if self.mouse_captured {
+            if self.has_focus() {
+                // How far did the mouse move away from the center? Then put it back.
+                let center = self.screen_center();
+                let mut cursor = Point { x: 0, y: 0 };
+                unsafe { GetCursorPos(&mut cursor) };
+                self.mouse_delta = (cursor.x - center.x, cursor.y - center.y);
+                unsafe { SetCursorPos(center.x, center.y) };
+            } else {
+                // Alt+Tab etc.: give the mouse back instead of trapping it.
+                self.set_mouse_captured(false);
             }
         }
         true
@@ -276,6 +346,57 @@ impl Window {
     /// True if `key` (a `key::` constant) went down since the previous frame.
     pub fn was_key_pressed(&self, key: usize) -> bool {
         self.keys_pressed[key]
+    }
+
+    /// True while `key` is being held down (and our window is the active one,
+    /// so typing in another program doesn't move the camera).
+    pub fn is_key_down(&self, key: usize) -> bool {
+        // The top bit of GetAsyncKeyState's result means "down right now".
+        self.has_focus() && unsafe { GetAsyncKeyState(key as i32) } as u16 & 0x8000 != 0
+    }
+
+    fn has_focus(&self) -> bool {
+        unsafe { GetForegroundWindow() == self.handle }
+    }
+
+    /// The center of our drawing area, in screen coordinates.
+    fn screen_center(&self) -> Point {
+        let mut center = Point { x: self.client_width / 2, y: self.client_height / 2 };
+        unsafe { ClientToScreen(self.handle, &mut center) };
+        center
+    }
+
+    /// Captured = cursor hidden and used for looking around, like a game.
+    pub fn set_mouse_captured(&mut self, captured: bool) {
+        if captured == self.mouse_captured {
+            return;
+        }
+        self.mouse_captured = captured;
+        unsafe {
+            // ShowCursor keeps a counter, so we call it exactly once per change.
+            ShowCursor(if captured { 0 } else { 1 });
+            if captured {
+                let center = self.screen_center();
+                SetCursorPos(center.x, center.y);
+            }
+        }
+    }
+
+    pub fn is_mouse_captured(&self) -> bool {
+        self.mouse_captured
+    }
+
+    /// How far the mouse moved this frame, in pixels (only while captured).
+    pub fn mouse_delta(&self) -> (i32, i32) {
+        self.mouse_delta
+    }
+
+    pub fn wheel_delta(&self) -> i32 {
+        self.wheel_delta
+    }
+
+    pub fn left_click(&self) -> Option<(i32, i32)> {
+        self.left_click
     }
 
     pub fn set_title(&self, title: &str) {

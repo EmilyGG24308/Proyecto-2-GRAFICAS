@@ -14,6 +14,15 @@ pub struct Sun {
     pub color: Color,
 }
 
+/// Two coordinate systems are used:
+/// - WORLD space: the camera, the sun and the sky live here and never turn.
+/// - DIORAMA space: the blocks live here. The whole diorama can spin like it's
+///   on a turntable, around a vertical axis through `pivot`, by `turn_angle`.
+///
+/// Instead of moving 28,000 blocks, we move each RAY the opposite way into
+/// diorama space, and do all the hit-testing and shading there. The blocks
+/// stay axis-aligned, so the fast grid walk keeps working. Only the things that
+/// live in world space (the sun direction, sky lookups) need converting.
 pub struct Scene {
     pub blocks: BlockGrid,
     pub materials: Vec<Material>,
@@ -21,19 +30,65 @@ pub struct Scene {
     pub sun: Sun,
     /// Light that reaches every surface, even in shadow (a stand-in for sky light).
     pub ambient: Color,
+    /// The diorama's center at ground level; it turns around this point.
+    pivot: Vec3,
+    /// Cosine and sine of the turn angle, computed once when the angle changes.
+    turn_cos: f32,
+    turn_sin: f32,
+    /// The sun direction as seen from inside the turned diorama.
+    local_sun_direction: Vec3,
 }
 
 impl Scene {
     /// An empty world with room for blocks from `min_corner` to
     /// `min_corner + size - 1` on each axis.
     pub fn new(min_corner: [i32; 3], size: [i32; 3], sun: Sun, ambient: Color) -> Scene {
+        let pivot = Vec3::new(
+            min_corner[0] as f32 + size[0] as f32 / 2.0,
+            0.0,
+            min_corner[2] as f32 + size[2] as f32 / 2.0,
+        );
+        let local_sun_direction = sun.direction_to_sun;
         Scene {
             blocks: BlockGrid::new(min_corner, size),
             materials: Vec::new(),
             textures: Vec::new(),
             sun,
             ambient,
+            pivot,
+            turn_cos: 1.0,
+            turn_sin: 0.0,
+            local_sun_direction,
         }
+    }
+
+    /// Turns the diorama to `angle` radians (positive = counterclockwise seen from above).
+    pub fn set_turn_angle(&mut self, angle: f32) {
+        self.turn_cos = angle.cos();
+        self.turn_sin = angle.sin();
+        self.local_sun_direction = self.to_diorama_direction(self.sun.direction_to_sun);
+    }
+
+    /// World → diorama: undo the diorama's turn (rotate by -angle around Y).
+    pub fn to_diorama_direction(&self, v: Vec3) -> Vec3 {
+        rotate_around_y(v, self.turn_cos, -self.turn_sin)
+    }
+
+    /// Diorama → world: apply the diorama's turn (rotate by +angle around Y).
+    pub fn to_world_direction(&self, v: Vec3) -> Vec3 {
+        rotate_around_y(v, self.turn_cos, self.turn_sin)
+    }
+
+    /// A camera ray, re-expressed in diorama space. Positions turn around the
+    /// pivot; directions just turn. Lengths don't change, so t values stay valid.
+    pub fn to_diorama_ray(&self, ray: &Ray) -> Ray {
+        let origin = self.pivot + self.to_diorama_direction(ray.origin - self.pivot);
+        Ray::new(origin, self.to_diorama_direction(ray.direction))
+    }
+
+    /// Direction toward the sun, in diorama space (use this for all lighting).
+    pub fn sun_direction(&self) -> Vec3 {
+        self.local_sun_direction
     }
 
     /// Loads assets/textures/<name>.bmp and returns its texture number.
@@ -128,9 +183,33 @@ impl Scene {
     }
 }
 
+/// Rotation around the vertical (Y) axis, given the angle's cosine and sine.
+/// Y is unchanged; X and Z turn like the hands of a clock seen from above.
+fn rotate_around_y(v: Vec3, cos: f32, sin: f32) -> Vec3 {
+    Vec3::new(v.x * cos + v.z * sin, v.y, -v.x * sin + v.z * cos)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn turning_and_turning_back_gives_the_original_direction() {
+        let mut scene = empty_scene();
+        scene.set_turn_angle(0.7);
+        let v = Vec3::new(0.3, -0.5, 0.8);
+        let round_trip = scene.to_world_direction(scene.to_diorama_direction(v));
+        assert!((round_trip - v).length() < 1e-6);
+    }
+
+    #[test]
+    fn a_quarter_turn_moves_the_front_to_the_side() {
+        let mut scene = empty_scene();
+        scene.set_turn_angle(std::f32::consts::FRAC_PI_2);
+        // What faced +Z (the front) now faces +X.
+        let front = scene.to_world_direction(Vec3::new(0.0, 0.0, 1.0));
+        assert!((front - Vec3::new(1.0, 0.0, 0.0)).length() < 1e-6);
+    }
 
     fn empty_scene() -> Scene {
         let sun = Sun { direction_to_sun: Vec3::UP, color: Color::BLACK };

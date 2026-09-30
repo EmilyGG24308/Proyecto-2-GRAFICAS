@@ -38,7 +38,8 @@ pub fn render_frame(framebuffer: &mut Framebuffer, camera: &Camera, scene: &Scen
                         break; // no rows left
                     };
                     for (x, pixel) in row.iter_mut().enumerate() {
-                        let ray = camera.ray_for_pixel(x, y, width, height);
+                        // Everything from here on happens in diorama space.
+                        let ray = scene.to_diorama_ray(&camera.ray_for_pixel(x, y, width, height));
                         *pixel = shade_ray(&ray, scene, show_normals);
                     }
                 }
@@ -51,7 +52,7 @@ fn shade_ray(ray: &Ray, scene: &Scene, show_normals: bool) -> Color {
     if show_normals {
         return match scene.closest_hit(ray, 0.0, f32::INFINITY) {
             Some(hit) => normal_as_color(&hit),
-            None => sky_color(ray.direction),
+            None => sky(scene, ray.direction),
         };
     }
     trace_ray(ray, scene, 0)
@@ -63,7 +64,7 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32) -> Color {
     match scene.closest_hit(ray, 0.0, f32::INFINITY) {
         Some(hit) => shade_hit(ray, &hit, scene, depth),
         // Missed everything: a reflected or refracted ray that flies off shows the sky.
-        None => sky_color(ray.direction),
+        None => sky(scene, ray.direction),
     }
 }
 
@@ -126,7 +127,7 @@ fn color_through(ray: &Ray, hit: &Hit, scene: &Scene, depth: u32) -> Color {
     //    underside of the surface (total internal reflection) a few times.
     for _ in 0..MAX_BOUNCES {
         let Some(boundary) = scene.exit_from(&inside_ray, hit.material) else {
-            return sky_color(inside_ray.direction); // left the world: shouldn't happen
+            return sky(scene, inside_ray.direction); // left the world: shouldn't happen
         };
 
         match boundary.entered {
@@ -189,7 +190,7 @@ fn refract(direction: Vec3, normal: Vec3, eta: f32) -> Option<Vec3> {
 fn shade_surface(scene: &Scene, hit: &Hit, view_direction: Vec3) -> Color {
     let material = &scene.materials[hit.material];
     let normal = hit.normal;
-    let to_sun = scene.sun.direction_to_sun;
+    let to_sun = scene.sun_direction(); // already turned into diorama space
 
     // The surface's own color comes from its texture at this exact point.
     let texture_number = if normal.y > 0.5 {
@@ -273,6 +274,13 @@ fn normal_as_color(hit: &Hit) -> Color {
 
 /// Temporary sky gradient (the real skybox comes in Phase 8):
 /// pink at the horizon, blue straight up.
+/// The sky seen along a diorama-space direction. The sky belongs to the world,
+/// not the diorama, so turn the direction back into world space first:
+/// spinning the diorama must not spin the clouds.
+fn sky(scene: &Scene, diorama_direction: Vec3) -> Color {
+    sky_color(scene.to_world_direction(diorama_direction))
+}
+
 fn sky_color(direction: Vec3) -> Color {
     let horizon = Color::new(1.0, 0.8, 0.88);
     let zenith = Color::new(0.45, 0.65, 1.0);
