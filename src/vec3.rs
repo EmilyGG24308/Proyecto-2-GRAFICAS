@@ -1,4 +1,4 @@
-use std::ops::{Add, Mul, Sub};
+use std::ops::{Add, Mul, Neg, Sub};
 
 /// A 3D vector. Used for points (positions) and directions.
 ///   +X = right, +Y = up, -Z = "into the screen" for the default camera.
@@ -44,6 +44,12 @@ impl Vec3 {
         Vec3::new(values[0], values[1], values[2])
     }
 
+    /// Mirrors this direction around a surface with unit normal `normal`,
+    /// like a ball bouncing off a wall: r = d - 2 (d·n) n
+    pub fn reflect(self, normal: Vec3) -> Vec3 {
+        self - normal * (2.0 * self.dot(normal))
+    }
+
     /// Same direction, length 1.
     pub fn normalized(self) -> Vec3 {
         self * (1.0 / self.length())
@@ -69,5 +75,13 @@ impl Mul<f32> for Vec3 {
     type Output = Vec3;
     fn mul(self, scale: f32) -> Vec3 {
         Vec3::new(self.x * scale, self.y * scale, self.z * scale)
+    }
+}
+
+/// -v points the opposite way.
+impl Neg for Vec3 {
+    type Output = Vec3;
+    fn neg(self) -> Vec3 {
+        Vec3::new(-self.x, -self.y, -self.z)
     }
 }

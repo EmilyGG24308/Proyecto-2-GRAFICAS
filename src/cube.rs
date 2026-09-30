@@ -1,4 +1,3 @@
-use crate::color::Color;
 use crate::ray::Ray;
 use crate::vec3::Vec3;
 
@@ -7,23 +6,23 @@ use crate::vec3::Vec3;
 pub struct Cube {
     pub min: Vec3,
     pub max: Vec3,
-    pub color: Color,
+    /// Index into `Scene::materials`.
+    pub material: usize,
 }
 
 /// Hit record: everything we need to know about where a ray hit a surface.
 pub struct Hit {
     /// Distance along the ray.
     pub t: f32,
-    #[allow(dead_code)] // first used by shadow rays in Phase 4
     pub point: Vec3,
     /// Unit vector pointing straight out of the face that was hit.
     pub normal: Vec3,
-    pub color: Color,
+    pub material: usize,
 }
 
 impl Cube {
-    pub fn new(min: Vec3, max: Vec3, color: Color) -> Cube {
-        Cube { min, max, color }
+    pub fn new(min: Vec3, max: Vec3, material: usize) -> Cube {
+        Cube { min, max, material }
     }
 
     /// Slab method. A box is the overlap of three "slabs" (the space between two
@@ -90,7 +89,7 @@ impl Cube {
             t,
             point,
             normal: self.outward_normal(point, axis),
-            color: self.color,
+            material: self.material,
         })
     }
 
@@ -110,7 +109,7 @@ mod tests {
 
     /// A 2×2×2 cube centered at the origin.
     fn unit_cube() -> Cube {
-        Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0), Color::BLACK)
+        Cube::new(Vec3::new(-1.0, -1.0, -1.0), Vec3::new(1.0, 1.0, 1.0), 0)
     }
 
     #[test]

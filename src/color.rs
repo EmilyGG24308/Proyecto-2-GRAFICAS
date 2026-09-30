@@ -1,3 +1,4 @@
+use std::ops::{Add, Mul};
 
 /// 0.0 means "none" and 1.0 means "full intensity".
 /// While computing lighting, values may go above 1.0 (a very bright)
@@ -13,11 +14,6 @@ impl Color {
 
     pub const fn new(r: f32, g: f32, b: f32) -> Color {
         Color { r, g, b }
-    }
-
-    /// Multiplies every channel by `factor` (0.5 = half as bright).
-    pub fn scaled(self, factor: f32) -> Color {
-        Color::new(self.r * factor, self.g * factor, self.b * factor)
     }
 
     /// Blends from `self` (t = 0) to `other` (t = 1). t = 0.5 gives the halfway color.
@@ -43,4 +39,29 @@ impl Color {
 /// The + 0.5 rounds to the nearest byte instead of always rounding down.
 fn channel_to_byte(channel: f32) -> u8 {
     (channel.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+}
+
+/// Adding light: two lights shining on the same spot add up.
+impl Add for Color {
+    type Output = Color;
+    fn add(self, other: Color) -> Color {
+        Color::new(self.r + other.r, self.g + other.g, self.b + other.b)
+    }
+}
+
+/// Color × color, channel by channel. A surface with albedo (1, 0.5, 0) lit by
+/// white light (1, 1, 1) gives (1, 0.5, 0); lit by blue light (0, 0, 1) gives black.
+impl Mul for Color {
+    type Output = Color;
+    fn mul(self, other: Color) -> Color {
+        Color::new(self.r * other.r, self.g * other.g, self.b * other.b)
+    }
+}
+
+/// Color × number: brighter (> 1) or darker (< 1).
+impl Mul<f32> for Color {
+    type Output = Color;
+    fn mul(self, factor: f32) -> Color {
+        Color::new(self.r * factor, self.g * factor, self.b * factor)
+    }
 }
