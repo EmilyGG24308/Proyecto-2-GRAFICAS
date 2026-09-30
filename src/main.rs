@@ -30,11 +30,11 @@ const WINDOW_TITLE: &str = "Mikage Shrine Raytracer";
 
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
-    let camera = Camera {
+    let camera = camera_from_arguments().unwrap_or(Camera {
         position: Vec3::new(44.0, 40.0, 50.0),
         target: Vec3::new(0.0, 9.0, -2.0),
         vertical_fov_degrees: 40.0,
-    };
+    });
     let scene = shrine::build_shrine_scene();
     let block_count = scene.blocks.block_count();
     // N key (or --normals) shows each face's normal as a color, to check the faces.
@@ -98,6 +98,22 @@ fn main() {
     }
 }
 
+
+/// `--camera=px,py,pz,tx,ty,tz[,fov]` places the camera at p looking at t.
+/// Used to take test snapshots from specific spots.
+fn camera_from_arguments() -> Option<Camera> {
+    let argument = std::env::args().find_map(|a| a.strip_prefix("--camera=").map(String::from))?;
+    let numbers: Vec<f32> = argument.split(',').filter_map(|part| part.trim().parse().ok()).collect();
+    if numbers.len() < 6 {
+        eprintln!("--camera needs at least 6 numbers: px,py,pz,tx,ty,tz[,fov]");
+        return None;
+    }
+    Some(Camera {
+        position: Vec3::new(numbers[0], numbers[1], numbers[2]),
+        target: Vec3::new(numbers[3], numbers[4], numbers[5]),
+        vertical_fov_degrees: numbers.get(6).copied().unwrap_or(50.0),
+    })
+}
 
 /// Saves the framebuffer to screenshots/shot_<milliseconds>.bmp.
 fn save_screenshot(framebuffer: &Framebuffer) {

@@ -17,8 +17,7 @@ pub struct Material {
     /// How much light passes THROUGH the surface (0 = opaque). Used in Phase 7.
     #[allow(dead_code)]
     pub transparency: f32,
-    /// How much of the surroundings it mirrors (0 = none). Used in Phase 6.
-    #[allow(dead_code)]
+    /// How much of the surroundings it mirrors: 0 = none, 1 = a perfect mirror.
     pub reflectivity: f32,
     /// How much light bends entering it (air = 1.0, water = 1.33). Used in Phase 7.
     #[allow(dead_code)]

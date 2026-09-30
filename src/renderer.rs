@@ -11,6 +11,12 @@ use std::sync::Mutex;
 /// immediately re-hit the surface it starts on (see `is_in_shadow`).
 const SURFACE_OFFSET: f32 = 1e-3;
 
+/// Most bounces a single camera ray may make. Two mirrors facing each other
+/// would otherwise bounce forever; after this many we stop and use the
+/// surface's own color. 3 is plenty: each bounce's share gets multiplied by
+/// the reflectivity again, so a 4th bounce would barely change the pixel.
+const MAX_BOUNCES: u32 = 3;
+
 /// Shoots one ray per pixel and stores the color it sees, using every CPU core.
 ///
 /// Rows are handed out one at a time from a shared queue (the Mutex): each
@@ -42,15 +48,47 @@ pub fn render_frame(framebuffer: &mut Framebuffer, camera: &Camera, scene: &Scen
 }
 
 fn shade_ray(ray: &Ray, scene: &Scene, show_normals: bool) -> Color {
+    if show_normals {
+        return match scene.closest_hit(ray, 0.0, f32::INFINITY) {
+            Some(hit) => normal_as_color(&hit),
+            None => sky_color(ray.direction),
+        };
+    }
+    trace_ray(ray, scene, 0)
+}
+
+/// The color seen looking along `ray`. `depth` counts how many bounces
+/// already happened to get here (0 for a ray straight from the camera).
+///
+/// This calls itself for the reflected ray: that is the recursion that makes
+/// a mirror show the scene, including other mirrors, up to MAX_BOUNCES deep.
+fn trace_ray(ray: &Ray, scene: &Scene, depth: u32) -> Color {
     let Some(hit) = scene.closest_hit(ray, 0.0, f32::INFINITY) else {
+        // Missed everything: a reflected ray that flies off shows the sky.
         return sky_color(ray.direction);
     };
-    if show_normals {
-        return normal_as_color(&hit);
+    let material = &scene.materials[hit.material];
+
+    // The surface's own look (texture + sunlight + highlight). Direction
+    // from the surface back toward the eye is the reverse of the ray.
+    let local_color = shade_surface(scene, &hit, -ray.direction);
+
+    if material.reflectivity <= 0.0 || depth >= MAX_BOUNCES {
+        return local_color;
     }
-    // Direction from the surface back toward the eye.
-    let view_direction = -ray.direction;
-    shade_surface(scene, &hit, view_direction)
+
+    // Mirror the incoming direction around the normal, and start the new ray
+    // slightly off the surface (same self-hit problem as shadow rays).
+    let reflected_ray = Ray::new(
+        hit.point + hit.normal * SURFACE_OFFSET,
+        ray.direction.reflect(hit.normal),
+    );
+    let reflected_color = trace_ray(&reflected_ray, scene, depth + 1);
+
+    // Blend: reflectivity 0.25 means 25% mirror image, 75% the surface itself.
+    // The two shares always add up to 100%, so the result is never brighter
+    // than its ingredients.
+    local_color * (1.0 - material.reflectivity) + reflected_color * material.reflectivity
 }
 
 /// Phong lighting: ambient + diffuse + specular.
@@ -150,6 +188,46 @@ fn sky_color(direction: Vec3) -> Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::material::Material;
+    use crate::scene::Sun;
+    use crate::texture::Texture;
+
+    /// An empty world containing one texture and one PERFECT mirror material.
+    fn mirror_scene() -> (Scene, usize) {
+        let sun = Sun { direction_to_sun: Vec3::UP, color: Color::new(1.0, 1.0, 1.0) };
+        let mut scene = Scene::new([-10, -10, -10], [20, 20, 20], sun, Color::BLACK);
+        scene.textures.push(Texture::missing());
+        let mirror = scene.add_material(Material {
+            reflectivity: 1.0,
+            ..Material::opaque(0, 1.0, 0.0, 1.0)
+        });
+        (scene, mirror)
+    }
+
+    #[test]
+    fn perfect_mirror_shows_the_sky_in_the_mirrored_direction() {
+        let (mut scene, mirror) = mirror_scene();
+        scene.add_block(0, -1, 0, mirror); // its top face is the plane y = 0
+
+        // Coming down at 45°, it must bounce up at 45° and see exactly that sky.
+        let ray = Ray::new(Vec3::new(0.5, 5.0, -4.5), Vec3::new(0.0, -1.0, 1.0));
+        let seen = trace_ray(&ray, &scene, 0);
+        let expected = sky_color(Vec3::new(0.0, 1.0, 1.0).normalized());
+        assert!((seen.r - expected.r).abs() < 1e-5);
+        assert!((seen.g - expected.g).abs() < 1e-5);
+        assert!((seen.b - expected.b).abs() < 1e-5);
+    }
+
+    #[test]
+    fn two_facing_mirrors_stop_after_max_bounces() {
+        let (mut scene, mirror) = mirror_scene();
+        scene.add_block(0, 0, -3, mirror);
+        scene.add_block(0, 0, 3, mirror);
+        // Straight at a mirror: it bounces straight back to the other one, forever
+        // without a limit. This test finishing at all proves the limit works.
+        let ray = Ray::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, -1.0));
+        let _ = trace_ray(&ray, &scene, 0);
+    }
 
     #[test]
     fn side_face_uv_is_upright_and_not_mirrored() {
