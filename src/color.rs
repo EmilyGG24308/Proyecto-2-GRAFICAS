@@ -10,10 +10,18 @@ pub struct Color {
 
 impl Color {
     pub const BLACK: Color = Color::new(0.0, 0.0, 0.0);
-    pub const WHITE: Color = Color::new(1.0, 1.0, 1.0);
 
     pub const fn new(r: f32, g: f32, b: f32) -> Color {
         Color { r, g, b }
+    }
+
+    /// Blends from `self` (t = 0) to `other` (t = 1). t = 0.5 gives the halfway color.
+    pub fn lerp(self, other: Color, t: f32) -> Color {
+        Color::new(
+            self.r + (other.r - self.r) * t,
+            self.g + (other.g - self.g) * t,
+            self.b + (other.b - self.b) * t,
+        )
     }
 
     /// Converts the color to three bytes (0–255) in R, G, B order.
