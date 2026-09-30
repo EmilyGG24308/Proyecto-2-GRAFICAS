@@ -38,6 +38,7 @@ struct Materials {
     house_roof: usize,
     road: usize,
     paper: usize,
+    koi: usize,
 }
 
 pub fn build_shrine_scene() -> Scene {
@@ -135,6 +136,7 @@ fn add_materials(scene: &mut Scene) -> Materials {
         house_roof: textured("house_roof", 0.9, 0.2, 16.0),
         road: textured("road", 0.9, 0.0, 1.0),
         paper: textured("paper", 0.95, 0.0, 1.0),
+        koi: textured("koi", 0.95, 0.3, 32.0), // wet, slightly shiny scales
     }
 }
 
@@ -238,14 +240,19 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
             let dz = (z as f32 + 0.5 - center_z) / radius;
             if dx * dx + dz * dz <= 1.0 {
                 scene.remove_block(x, HILL_TOP, z); // pond surface sits 1 below the grass
-                scene.fill((x, HILL_TOP - 2, z), (x, HILL_TOP - 1, z), m.water);
-                scene.add_block(x, HILL_TOP - 3, z, m.sand);
+                scene.fill((x, HILL_TOP - 3, z), (x, HILL_TOP - 1, z), m.water); // 3 deep
+                scene.add_block(x, HILL_TOP - 4, z, m.sand);
             }
         }
     }
-    // Rocks poking out of the water.
-    scene.add_block(13, HILL_TOP - 1, -7, m.rock);
-    scene.add_block(8, HILL_TOP - 1, -12, m.rock);
+    // Rocks standing on the pond floor, their tops just under the surface.
+    scene.fill((13, HILL_TOP - 3, -7), (13, HILL_TOP - 1, -7), m.rock);
+    scene.fill((8, HILL_TOP - 3, -12), (8, HILL_TOP - 1, -12), m.rock);
+
+    // Koi swimming underwater: they are what refraction lets you see (and bend).
+    scene.fill((9, HILL_TOP - 2, -8), (10, HILL_TOP - 2, -8), m.koi); // along X
+    scene.fill((13, HILL_TOP - 3, -13), (13, HILL_TOP - 3, -11), m.koi); // along Z, deeper
+    scene.fill((10, HILL_TOP - 2, -12), (11, HILL_TOP - 2, -12), m.koi);
 
     // Arched wooden bridge across the pond (along X at z = -10).
     for x in 6..=16 {

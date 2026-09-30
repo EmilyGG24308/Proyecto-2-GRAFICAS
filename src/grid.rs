@@ -76,13 +76,32 @@ impl BlockGrid {
         self.cells.iter().filter(|cell| cell.is_some()).count()
     }
 
-    /// Grid walk ("DDA", Amanatides & Woo 1987). Returns the first solid block
-    /// the ray ENTERS with t between t_min and t_max.
+    /// The first solid block the ray ENTERS with t between t_min and t_max.
+    pub fn trace(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
+        let boundary = self.walk_until(ray, t_min, t_max, |cell| cell.is_some())?;
+        let material = boundary.entered.expect("a solid cell always has a material");
+        Some(Hit { t: boundary.t, point: boundary.point, normal: boundary.normal, material: material as usize })
+    }
+
+    /// Grid walk ("DDA", Amanatides & Woo 1987). Walks cell by cell and stops at
+    /// the first cell ENTERED (t between t_min and t_max) for which `is_boundary`
+    /// says yes. The cell the ray starts in is never tested.
+    ///
+    /// Callers decide what counts as a boundary:
+    /// - camera rays: any block at all
+    /// - shadow rays: only blocks that are not see-through
+    /// - rays travelling inside water: any cell that is NOT water (air or solid)
     ///
     /// Idea: along each axis, the ray crosses a cell wall every `t_delta` units
     /// of t. We keep, per axis, the t of the NEXT wall (`t_next`). Each step we
     /// cross whichever wall comes first, move one cell that way, and check it.
-    pub fn trace(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
+    pub fn walk_until(
+        &self,
+        ray: &Ray,
+        t_min: f32,
+        t_max: f32,
+        is_boundary: impl Fn(Option<u8>) -> bool,
+    ) -> Option<Boundary> {
         // 1. Where does the walk start? Inside the grid: at the ray's start.
         //    Outside: where the ray enters the grid's outer box (slab method).
         let (t_start, entry_normal) = if self.bounds.contains(ray.at(t_min)) {
@@ -116,15 +135,16 @@ impl BlockGrid {
             // direction 0: never crosses a wall on this axis, t_next stays infinite
         }
 
-        // 2. Coming from outside, the very first cell may already be solid.
-        //    (Starting inside, we skip the start cell: shadow rays start in air.)
+        // 2. Coming from outside, the very first cell may already be a boundary.
+        //    (Starting inside, we skip the start cell: the ray starts IN it.)
         if let Some(normal) = entry_normal {
-            if let Some(material) = self.cell(cell) {
-                return Some(self.make_hit(ray, t_start, normal, material));
+            let content = self.cell(cell);
+            if is_boundary(content) {
+                return Some(Boundary { t: t_start, point: ray.at(t_start), normal, entered: content });
             }
         }
 
-        // 3. Step from cell to cell until we find a block or leave the grid.
+        // 3. Step from cell to cell until we find a boundary or leave the grid.
         loop {
             let axis = if t_next[0] < t_next[1] {
                 if t_next[0] < t_next[2] { 0 } else { 2 }
@@ -144,21 +164,26 @@ impl BlockGrid {
             }
             t_next[axis] += t_delta[axis];
 
-            if let Some(material) = self.cell(cell) {
-                if t >= t_min {
-                    // We entered this block through the wall on `axis`,
-                    // so its face normal points back against our step.
-                    let mut normal = [0.0; 3];
-                    normal[axis] = -step[axis] as f32;
-                    return Some(self.make_hit(ray, t, Vec3::from_array(normal), material));
-                }
+            let content = self.cell(cell);
+            if t >= t_min && is_boundary(content) {
+                // We crossed the wall on `axis`, so the wall's normal points
+                // back against our step: toward the side the ray came from.
+                let mut normal = [0.0; 3];
+                normal[axis] = -step[axis] as f32;
+                return Some(Boundary { t, point: ray.at(t), normal: Vec3::from_array(normal), entered: content });
             }
         }
     }
+}
 
-    fn make_hit(&self, ray: &Ray, t: f32, normal: Vec3, material: u8) -> Hit {
-        Hit { t, point: ray.at(t), normal, material: material as usize }
-    }
+/// Where a grid walk stopped: the wall it crossed and what is on the other side.
+pub struct Boundary {
+    pub t: f32,
+    pub point: Vec3,
+    /// Unit normal of the crossed wall, pointing back toward where the ray came from.
+    pub normal: Vec3,
+    /// The cell just entered: `None` = air, `Some(m)` = a block of material m.
+    pub entered: Option<u8>,
 }
 
 #[cfg(test)]

@@ -4,10 +4,11 @@
 //! texture has its own small palette) into BMP files in `assets/textures/`.
 //! The renderer only ever reads those BMP files.
 //!
-//!     cargo run --example make_textures
+//!     cargo run --example make_textures                  (only writes missing files)
+//!     cargo run --example make_textures -- --overwrite   (rewrites all of them)
 //!
-//! Warning: running it again overwrites the BMPs. If you repaint a texture in
-//! MS Paint, don't re-run this tool (or edit the drawing here instead).
+//! Existing BMPs are kept by default, so textures you repainted in MS Paint
+//! are safe. `--overwrite` resets every texture to the drawings below.
 
 use std::fs;
 use std::io::Write;
@@ -443,6 +444,34 @@ const TEXTURES: &[Art] = &[
         ],
     },
     Art {
+        // Koi scales: orange and white patches, with a few deep red spots.
+        name: "koi",
+        palette: &[
+            ('o', [242, 122, 40]),
+            ('O', [222, 96, 30]),
+            ('w', [250, 246, 236]),
+            ('r', [200, 58, 30]),
+        ],
+        rows: [
+            "wwwoooOoowwwoooo",
+            "wwooOoooowwooOoo",
+            "wooooOoowwwooooo",
+            "ooOoooowwwwoooOo",
+            "oooooowwwwoooooo",
+            "oOoooowwwoooOooo",
+            "oooroooowooooooo",
+            "ooOrrooooooooOwo",
+            "oooooOoooooowwww",
+            "oooooooooooowwww",
+            "wwooooOooooowwoo",
+            "wwwoooooooOooroo",
+            "wwwwooooOooooooo",
+            "wwwoooooooooOooo",
+            "wwooooOoooowwooo",
+            "woooooooooowwwoo",
+        ],
+    },
+    Art {
         // Lantern paper in a dark wooden frame.
         name: "paper",
         palette: &[
@@ -475,9 +504,15 @@ fn main() {
     let folder = Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join("textures");
     fs::create_dir_all(&folder).expect("could not create assets/textures");
 
+    let overwrite = std::env::args().any(|argument| argument == "--overwrite");
     for art in TEXTURES {
+        let pixels = to_pixels(art); // checks every drawing, even ones we skip
         let path = folder.join(format!("{}.bmp", art.name));
-        write_bmp(&path, &to_pixels(art)).expect("could not write texture");
+        if path.exists() && !overwrite {
+            println!("kept  {} (already exists)", path.display());
+            continue;
+        }
+        write_bmp(&path, &pixels).expect("could not write texture");
         println!("wrote {}", path.display());
     }
 }

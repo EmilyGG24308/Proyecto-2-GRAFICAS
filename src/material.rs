@@ -14,13 +14,12 @@ pub struct Material {
     pub specular_strength: f32,
     /// How small and sharp the highlight is. ~8 = broad soft shine, ~64 = tight spot.
     pub shininess: f32,
-    /// How much light passes THROUGH the surface (0 = opaque). Used in Phase 7.
-    #[allow(dead_code)]
+    /// How much light passes THROUGH the surface: 0 = opaque, 1 = perfectly clear.
     pub transparency: f32,
     /// How much of the surroundings it mirrors: 0 = none, 1 = a perfect mirror.
     pub reflectivity: f32,
-    /// How much light bends entering it (air = 1.0, water = 1.33). Used in Phase 7.
-    #[allow(dead_code)]
+    /// How much light bends entering it (air = 1.0, water = 1.33, glass = 1.5).
+    /// Only matters when transparency > 0.
     pub refractive_index: f32,
 }
 

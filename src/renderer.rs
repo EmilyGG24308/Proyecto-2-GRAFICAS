@@ -59,36 +59,130 @@ fn shade_ray(ray: &Ray, scene: &Scene, show_normals: bool) -> Color {
 
 /// The color seen looking along `ray`. `depth` counts how many bounces
 /// already happened to get here (0 for a ray straight from the camera).
-///
-/// This calls itself for the reflected ray: that is the recursion that makes
-/// a mirror show the scene, including other mirrors, up to MAX_BOUNCES deep.
 fn trace_ray(ray: &Ray, scene: &Scene, depth: u32) -> Color {
-    let Some(hit) = scene.closest_hit(ray, 0.0, f32::INFINITY) else {
-        // Missed everything: a reflected ray that flies off shows the sky.
-        return sky_color(ray.direction);
-    };
+    match scene.closest_hit(ray, 0.0, f32::INFINITY) {
+        Some(hit) => shade_hit(ray, &hit, scene, depth),
+        // Missed everything: a reflected or refracted ray that flies off shows the sky.
+        None => sky_color(ray.direction),
+    }
+}
+
+/// The color of a surface point, including what it reflects and what is
+/// seen through it. Calls trace_ray again for those new rays: that recursion
+/// is how a mirror or a pond shows the rest of the scene.
+fn shade_hit(ray: &Ray, hit: &Hit, scene: &Scene, depth: u32) -> Color {
     let material = &scene.materials[hit.material];
 
     // The surface's own look (texture + sunlight + highlight). Direction
     // from the surface back toward the eye is the reverse of the ray.
-    let local_color = shade_surface(scene, &hit, -ray.direction);
+    let local_color = shade_surface(scene, hit, -ray.direction);
 
-    if material.reflectivity <= 0.0 || depth >= MAX_BOUNCES {
+    let (reflectivity, transparency) = (material.reflectivity, material.transparency);
+    if (reflectivity <= 0.0 && transparency <= 0.0) || depth >= MAX_BOUNCES {
         return local_color;
     }
 
-    // Mirror the incoming direction around the normal, and start the new ray
-    // slightly off the surface (same self-hit problem as shadow rays).
-    let reflected_ray = Ray::new(
-        hit.point + hit.normal * SURFACE_OFFSET,
-        ray.direction.reflect(hit.normal),
-    );
-    let reflected_color = trace_ray(&reflected_ray, scene, depth + 1);
+    let reflected_color = if reflectivity > 0.0 {
+        // Mirror the incoming direction around the normal, and start the new ray
+        // slightly off the surface (same self-hit problem as shadow rays).
+        let reflected_ray = Ray::new(hit.point + hit.normal * SURFACE_OFFSET, ray.direction.reflect(hit.normal));
+        trace_ray(&reflected_ray, scene, depth + 1)
+    } else {
+        Color::BLACK
+    };
 
-    // Blend: reflectivity 0.25 means 25% mirror image, 75% the surface itself.
-    // The two shares always add up to 100%, so the result is never brighter
-    // than its ingredients.
-    local_color * (1.0 - material.reflectivity) + reflected_color * material.reflectivity
+    let transmitted_color = if transparency > 0.0 {
+        color_through(ray, hit, scene, depth)
+    } else {
+        Color::BLACK
+    };
+
+    // Energy split: the mirror takes its share first; of what is left, the
+    // transparent part passes through and the rest is the surface's own color.
+    // Water: 25% mirror, 75% × 80% = 60% seen through, 75% × 20% = 15% own blue.
+    // The shares add up to exactly 100%, so nothing gets brighter than its sources.
+    reflected_color * reflectivity
+        + (transmitted_color * transparency + local_color * (1.0 - transparency)) * (1.0 - reflectivity)
+}
+
+/// What you see THROUGH a transparent block: follow the light in, across the
+/// whole body of that material, and back out the other side.
+///
+/// Assumption: one transparent material at a time (no glass inside water).
+/// Neighboring blocks of the same material form one body, like a real pond.
+fn color_through(ray: &Ray, hit: &Hit, scene: &Scene, depth: u32) -> Color {
+    let material = &scene.materials[hit.material];
+
+    // 1. ENTER: bend from air (index 1.0) into the material. The hit normal
+    //    points out of the block, toward the incoming ray, as refract() expects.
+    //    Going into a denser material can never be total internal reflection.
+    let Some(inside_direction) = refract(ray.direction, hit.normal, 1.0 / material.refractive_index) else {
+        return Color::BLACK;
+    };
+    // Start just INSIDE the surface this time, hence minus the normal.
+    let mut inside_ray = Ray::new(hit.point - hit.normal * SURFACE_OFFSET, inside_direction);
+
+    // 2. TRAVEL inside until the contents change. A ray can bounce off the
+    //    underside of the surface (total internal reflection) a few times.
+    for _ in 0..MAX_BOUNCES {
+        let Some(boundary) = scene.exit_from(&inside_ray, hit.material) else {
+            return sky_color(inside_ray.direction); // left the world: shouldn't happen
+        };
+
+        match boundary.entered {
+            // Something solid underwater (the pond floor, a koi, a rock): its own
+            // color, seen through the water. boundary.normal points back toward
+            // the ray, which is exactly the solid face's outward normal.
+            Some(solid) => {
+                let underwater_hit = Hit {
+                    t: boundary.t,
+                    point: boundary.point,
+                    normal: boundary.normal,
+                    material: solid as usize,
+                };
+                return shade_hit(&inside_ray, &underwater_hit, scene, depth + 1);
+            }
+            // 3. EXIT into air: bend back out (material index → 1.0). Here the
+            //    normal points back INTO the water, again facing the ray.
+            None => match refract(inside_ray.direction, boundary.normal, material.refractive_index) {
+                Some(outside_direction) => {
+                    let outside_ray = Ray::new(boundary.point - boundary.normal * SURFACE_OFFSET, outside_direction);
+                    return trace_ray(&outside_ray, scene, depth + 1);
+                }
+                None => {
+                    // Too shallow an angle to get out: the surface acts as a
+                    // perfect mirror from below, and the ray stays inside.
+                    inside_ray = Ray::new(
+                        boundary.point + boundary.normal * SURFACE_OFFSET,
+                        inside_ray.direction.reflect(boundary.normal),
+                    );
+                }
+            },
+        }
+    }
+    Color::BLACK // trapped bouncing inside: give up (rare)
+}
+
+/// Snell's law: bends a unit `direction` as it crosses into another material.
+///
+/// `normal` must face the incoming ray (normal · direction < 0).
+/// `eta` = (index of the material we come FROM) / (index we go INTO),
+/// e.g. 1.0 / 1.33 from air into water.
+///
+/// Returns None for total internal reflection: when leaving a denser material
+/// at a shallow angle, sin(angle out) would have to exceed 1, which is
+/// impossible, so no light gets out.
+fn refract(direction: Vec3, normal: Vec3, eta: f32) -> Option<Vec3> {
+    let cos_in = -normal.dot(direction);
+    // Snell: sin(out) = eta × sin(in), and sin² = 1 − cos²
+    let sin_out_squared = eta * eta * (1.0 - cos_in * cos_in);
+    if sin_out_squared > 1.0 {
+        return None;
+    }
+    let cos_out = (1.0 - sin_out_squared).sqrt();
+    // Keep the part along the surface (scaled by eta) and rebuild the part
+    // along the normal so the result has length 1 and the new angle.
+    Some(direction * eta + normal * (eta * cos_in - cos_out))
 }
 
 /// Phong lighting: ambient + diffuse + specular.
@@ -227,6 +321,64 @@ mod tests {
         // without a limit. This test finishing at all proves the limit works.
         let ray = Ray::new(Vec3::new(0.5, 0.5, 0.5), Vec3::new(0.0, 0.0, -1.0));
         let _ = trace_ray(&ray, &scene, 0);
+    }
+
+    const WATER: f32 = 1.33;
+
+    #[test]
+    fn looking_straight_down_is_not_bent() {
+        let down = Vec3::new(0.0, -1.0, 0.0);
+        let bent = refract(down, Vec3::UP, 1.0 / WATER).unwrap();
+        assert!((bent - down).length() < 1e-6);
+    }
+
+    #[test]
+    fn entering_water_at_45_degrees_bends_toward_the_normal() {
+        let incoming = Vec3::new(1.0, -1.0, 0.0).normalized(); // 45° from vertical
+        let bent = refract(incoming, Vec3::UP, 1.0 / WATER).unwrap();
+        // Snell: sin(out) = sin(45°) / 1.33 = 0.5317, i.e. about 32.1° from vertical.
+        assert!((bent.x - 0.5317).abs() < 1e-3);
+        assert!(bent.y < 0.0);
+        assert!((bent.length() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn leaving_water_at_a_shallow_angle_is_total_internal_reflection() {
+        // From inside, going up at 60° from vertical: sin(60°) × 1.33 = 1.15 > 1.
+        // (The critical angle for water is about 48.8°.) The normal faces the ray: down.
+        let upward = Vec3::new(60f32.to_radians().sin(), 60f32.to_radians().cos(), 0.0);
+        assert!(refract(upward, Vec3::new(0.0, -1.0, 0.0), WATER).is_none());
+        // At 30° it does get out.
+        let steep = Vec3::new(30f32.to_radians().sin(), 30f32.to_radians().cos(), 0.0);
+        assert!(refract(steep, Vec3::new(0.0, -1.0, 0.0), WATER).is_some());
+    }
+
+    #[test]
+    fn a_flat_slab_shifts_the_ray_but_keeps_its_direction() {
+        // Enter through the top face and leave through the bottom face. Both
+        // normals face the ray (point up), so the two bends exactly cancel.
+        let incoming = Vec3::new(0.6, -0.8, 0.0);
+        let inside = refract(incoming, Vec3::UP, 1.0 / WATER).unwrap();
+        let outgoing = refract(inside, Vec3::UP, WATER).unwrap();
+        assert!((outgoing - incoming).length() < 1e-5);
+    }
+
+    #[test]
+    fn perfectly_clear_blocks_are_invisible() {
+        // Three clear blocks in a row that don't bend light (index 1.0) and
+        // don't reflect: looking through them must show exactly the sky behind.
+        let (mut scene, _) = mirror_scene();
+        let clear = scene.add_material(Material {
+            transparency: 1.0,
+            refractive_index: 1.0,
+            ..Material::opaque(0, 1.0, 0.0, 1.0)
+        });
+        scene.fill((0, 0, 0), (0, 0, 2), clear);
+        let direction = Vec3::new(0.1, 0.2, 1.0).normalized();
+        let ray = Ray::new(Vec3::new(0.5, 0.3, -5.0), direction);
+        let seen = trace_ray(&ray, &scene, 0);
+        let expected = sky_color(direction);
+        assert!((seen.r - expected.r).abs() < 1e-4 && (seen.b - expected.b).abs() < 1e-4);
     }
 
     #[test]

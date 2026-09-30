@@ -1,6 +1,6 @@
 use crate::color::Color;
 use crate::cube::Hit;
-use crate::grid::BlockGrid;
+use crate::grid::{BlockGrid, Boundary};
 use crate::material::Material;
 use crate::ray::Ray;
 use crate::texture::Texture;
@@ -60,9 +60,23 @@ impl Scene {
         self.blocks.trace(ray, t_min, t_max)
     }
 
-    /// True if anything blocks the ray between t_min and t_max (for shadows).
+    /// True if an OPAQUE block is in the way between t_min and t_max (for shadows).
+    /// See-through blocks (water, glass) let sunlight pass, so the pond floor
+    /// is lit. Simplification: they don't dim or focus the light passing through.
     pub fn is_blocked(&self, ray: &Ray, t_min: f32, t_max: f32) -> bool {
-        self.blocks.trace(ray, t_min, t_max).is_some()
+        self.blocks
+            .walk_until(ray, t_min, t_max, |cell| {
+                cell.is_some_and(|material| self.materials[material as usize].transparency == 0.0)
+            })
+            .is_some()
+    }
+
+    /// For a ray travelling INSIDE a see-through material: the first wall where
+    /// the contents change, i.e. where it reaches air or hits something solid.
+    /// Neighboring blocks of the same material count as one continuous body,
+    /// so the walls between two water blocks are invisible, as they should be.
+    pub fn exit_from(&self, ray: &Ray, medium: usize) -> Option<Boundary> {
+        self.blocks.walk_until(ray, 0.0, f32::INFINITY, |cell| cell != Some(medium as u8))
     }
 
     pub fn add_material(&mut self, material: Material) -> usize {
@@ -137,7 +151,9 @@ mod tests {
     #[test]
     fn shadow_ray_is_blocked_by_block_above() {
         let mut scene = empty_scene();
-        scene.add_block(0, 3, 0, 0);
+        // Shadows check the block's material (see-through or not), so it needs one.
+        let stone = scene.add_material(Material::opaque(0, 1.0, 0.0, 1.0));
+        scene.add_block(0, 3, 0, stone);
         let upward = Ray::new(Vec3::new(0.5, 1.0, 0.5), Vec3::UP);
         assert!(scene.is_blocked(&upward, 0.0, f32::INFINITY));
         // Distance limit: a light 1 unit away is reached before the block at y = 3.
