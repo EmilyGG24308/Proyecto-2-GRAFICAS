@@ -123,26 +123,42 @@ impl Animation {
         let heading = Vec3::new(-koi.radius_x * angle.sin(), 0.0, koi.radius_z * angle.cos()) * koi.speed.signum();
         let forward = heading.normalized();
         let side = Vec3::new(forward.z, 0.0, -forward.x); // horizontal, perpendicular to forward
-        let wag = (time * 7.0 + koi.phase).sin() * 0.06;
+        let up = Vec3::new(0.0, 1.0, 0.0);
+        let wag = (time * 7.0 + koi.phase).sin() * 0.08;
+        let tail_wag = (time * 5.5 + koi.phase).sin() * 0.12;
 
         let (orange, white) = (self.koi_orange, self.koi_white);
-        // (distance along the fish, distance to the side, cube size, material)
+        // Better fish shape: (distance along, distance to side, distance up, size_x, size_y, size_z, material)
+        // More detailed, more fish-like proportions
         let parts = [
-            (0.32, 0.0, 0.17, white),   // head
-            (0.14, 0.0, 0.22, orange),  // front of the body
-            (-0.04, 0.0, 0.22, white),  // white patch
-            (-0.2, 0.0, 0.18, orange),  // back of the body
-            (0.12, 0.16, 0.08, white),  // side fins
-            (0.12, -0.16, 0.08, white),
-            (-0.36, 0.07 + wag, 0.11, orange), // forked tail
-            (-0.36, -0.07 + wag, 0.11, orange),
+            // Head (more prominent)
+            (0.35, 0.0, 0.0, 0.16, 0.16, 0.18, white),
+            // Upper body (longer, tapered)
+            (0.12, 0.0, 0.06, 0.24, 0.14, 0.22, orange),
+            // White patch (belly)
+            (-0.05, 0.0, -0.06, 0.20, 0.10, 0.20, white),
+            // Lower body
+            (-0.2, 0.0, -0.04, 0.20, 0.12, 0.18, orange),
+            // Dorsal fin (top)
+            (-0.08, 0.0, 0.15, 0.08, 0.12, 0.06, orange),
+            // Side fins (left/right)
+            (0.05, 0.18, -0.02, 0.06, 0.08, 0.10, white),
+            (0.05, -0.18, -0.02, 0.06, 0.08, 0.10, white),
+            // Tail lobes (left, right) - forked and wagging
+            (-0.42, 0.12 + tail_wag * 0.5, 0.04, 0.09, 0.09, 0.14, orange),
+            (-0.42, -0.12 + tail_wag * 0.5, 0.04, 0.09, 0.09, 0.14, orange),
+            // Tail center base
+            (-0.35, 0.0, 0.0, 0.08, 0.08, 0.12, orange),
         ];
-        const FISH_SCALE: f32 = 1.5; // the numbers above are for a fish ~0.8 blocks long
+        const FISH_SCALE: f32 = 1.5;
         parts
             .iter()
-            .map(|&(along, across, size, material)| {
-                let position = center + forward * (along * FISH_SCALE) + side * (across * FISH_SCALE);
-                let half = Vec3::new(size, size * 0.8, size) * (0.5 * FISH_SCALE); // a little flatter than wide
+            .map(|&(along, across, up_offset, size_x, size_y, size_z, material)| {
+                let position = center
+                    + forward * (along * FISH_SCALE)
+                    + side * (across * FISH_SCALE)
+                    + up * (up_offset * FISH_SCALE);
+                let half = Vec3::new(size_x, size_y, size_z) * (0.5 * FISH_SCALE);
                 Cube::new(position - half, position + half, material)
             })
             .collect()

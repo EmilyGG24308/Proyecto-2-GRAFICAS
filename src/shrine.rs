@@ -134,6 +134,10 @@ pub fn build_shrine_world() -> World {
     }
     // Flowering bushes last: they only fill empty space, around everything else.
     build_flower_bushes(&mut scene, &m);
+
+    // Decorative structures: tea stalls, small shrines, lantern poles
+    build_decorative_elements(&mut scene, &m);
+
     World { scene, animation, portal_material: m.portal, arrival }
 }
 
@@ -577,6 +581,25 @@ fn build_flower_bushes(scene: &mut Scene, m: &Materials) {
         (-12, 18, pink), (8, 18, blue), (21, 18, pink), (-22, 18, blue), (-8, 23, blue), (10, 23, pink),
     ] {
         build_bush(scene, m, x, z, flower);
+    }
+}
+
+/// Lantern poles and tea stalls scattered throughout
+fn build_decorative_elements(scene: &mut Scene, m: &Materials) {
+    // Lantern poles at key spots
+    for (x, z) in [(0, 10), (-35, 15), (35, -10), (-20, 0), (25, 25), (-25, -20)] {
+        let ground = surface_top(scene, x, z);
+        for dy in 0..4 {
+            scene.add_block(x, ground + 1 + dy, z, m.shrine_wood);
+        }
+        scene.add_block(x, ground + 5, z, m.path_stone);
+        let (bx, by, bz) = (x * MINI, (ground + 5) * MINI, z * MINI);
+        scene.fill_mini((bx, by, bz), (bx + 3, by + 2, bz + 3), m.red_lantern);
+        scene.point_lights.push(PointLight {
+            position: Vec3::new(x as f32 + 0.5, (ground + 7) as f32, z as f32 + 0.5),
+            color: Color::new(1.1, 0.8, 0.5),
+            radius: 8.0,
+        });
     }
 }
 
