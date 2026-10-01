@@ -659,7 +659,7 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     }
 }
 
-/// Subtle guide lights marking the path to the cave - just 2 lanterns, not overdone.
+/// Subtle guide lights marking the path to the cave - lanterns creating a subtle trail
 fn build_guide_lights(scene: &mut Scene, m: &Materials) {
     // Only mark the cave entrance itself, don't clutter the path
     let cave_entrance_x = -23;
@@ -668,6 +668,10 @@ fn build_guide_lights(scene: &mut Scene, m: &Materials) {
 
     // Stone lantern right at the cave entrance
     build_stone_lantern(scene, m, cave_entrance_x, y, cave_entrance_z);
+
+    // Two additional guide lanterns forming a subtle path toward the cave
+    build_stone_lantern(scene, m, -15, y, -15);
+    build_stone_lantern(scene, m, -20, y, -12);
 }
 
 /// More lanterns and flowers around the shrine area to make it feel grander
