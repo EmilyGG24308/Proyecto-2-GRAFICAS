@@ -25,7 +25,7 @@ use std::path::Path;
 
 const FACE_SIZE: usize = 256;
 /// Must match the sun in src/shrine.rs so the painted sun and the shadows agree.
-const SUN_DIRECTION: [f32; 3] = [0.35, 1.0, 0.8];
+const SUN_DIRECTION: [f32; 3] = [0.8, 0.45, 0.35];
 /// Must match the moon in src/spirit.rs for the same reason.
 const MOON_DIRECTION: [f32; 3] = [-0.4, 0.55, -0.75];
 /// Levels per color channel after snapping (fewer = more "pixel art").
@@ -134,61 +134,78 @@ fn night_sky_at(d: Rgb, moon: Rgb) -> Rgb {
     color
 }
 
-/// The color of the sky looking in unit direction `d`.
+/// The day sky over the shrine at golden hour, looking in unit direction `d`:
+/// warm peach and orange toward the low sun, lavender-blue overhead, soft
+/// clouds, hazy islands on the horizon, and the sea below with a glittering
+/// path of sunlight on it.
 fn sky_at(d: Rgb, sun: Rgb) -> Rgb {
     let [x, y, z] = d;
 
-    // 1. Base: pink at the horizon, through lavender-blue, to blue overhead.
-    //    Below the horizon: a soft sea of clouds.
-    let horizon = [1.0, 0.84, 0.88];
-    let middle = [0.74, 0.8, 0.97];
-    let zenith = [0.47, 0.65, 0.94];
+    // How much this direction faces the sun's side of the horizon (0..1).
+    let flat_length = (x * x + z * z).sqrt().max(1e-4);
+    let sun_flat_length = (sun[0] * sun[0] + sun[2] * sun[2]).sqrt();
+    let sun_side = ((x * sun[0] + z * sun[2]) / (flat_length * sun_flat_length)).max(0.0);
+    // The horizon is peach-pink, turning orange-gold on the sun's side.
+    let horizon = mix([1.0, 0.8, 0.8], [1.0, 0.7, 0.45], sun_side * sun_side);
+
+    // 1. Sky above the horizon: horizon color, through lavender, to blue.
+    let middle = [0.78, 0.74, 0.92];
+    let zenith = [0.45, 0.58, 0.9];
     let mut color = if y >= 0.0 {
-        let t = y.powf(0.55);
+        let t = y.powf(0.5);
         if t < 0.5 { mix(horizon, middle, t * 2.0) } else { mix(middle, zenith, t * 2.0 - 1.0) }
     } else {
-        let bumps = fbm(x / (0.2 - y) * 3.0, z / (0.2 - y) * 3.0, 7);
-        let depth = (-y).powf(0.5);
-        mix(mix([1.0, 0.9, 0.93], [0.82, 0.78, 0.93], depth), [1.0, 0.97, 0.98], smoothstep(0.55, 0.75, bumps) * 0.6)
+        // 2. The sea: it mirrors the horizon color near the horizon and gets
+        //    deeper blue looking down. A sparkling streak where the sun's
+        //    reflection would be.
+        let depth = (-y).powf(0.35);
+        let mut sea = mix(scale(horizon, 0.9), [0.2, 0.28, 0.52], depth);
+        let mirrored = [x, -y, z];
+        let glint = dot(mirrored, sun).max(0.0).powf(60.0);
+        let sparkle = hash(((x / (0.05 - y) * 40.0) as i32, (z / (0.05 - y) * 40.0) as i32), 3);
+        if sparkle > 0.6 {
+            sea = add(sea, scale([1.0, 0.85, 0.6], glint * 1.2));
+        }
+        sea
     };
 
-    // 2. The sun: a wide warm glow plus a small bright disc.
+    // 3. The sun: a wide warm glow plus a bright disc.
     let toward_sun = dot(d, sun).max(0.0);
-    color = add(color, scale([1.0, 0.85, 0.7], toward_sun.powf(24.0) * 0.35));
-    if toward_sun > 0.9985 {
-        color = [1.0, 0.98, 0.9];
+    color = add(color, scale([1.0, 0.75, 0.5], toward_sun.powf(16.0) * 0.45));
+    if toward_sun > 0.998 {
+        color = [1.0, 0.95, 0.82];
     }
 
-    // 3. Clouds, above the horizon. Project the direction onto a flat "cloud
+    // 4. Clouds, above the horizon. Project the direction onto a flat "cloud
     //    ceiling" (divide by height) so clouds shrink toward the horizon.
+    //    Near the sun they glow gold; elsewhere they are pink and lavender.
     if y > 0.0 {
         let ceiling = y + 0.12;
         let (cx, cz) = (x / ceiling * 1.3, z / ceiling * 1.3);
         let density = fbm(cx, cz, 1);
         let amount = smoothstep(0.5, 0.64, density) * smoothstep(0.0, 0.1, y);
-        // Brighter tops, lavender undersides, a pink tint near the horizon.
         let lit = smoothstep(0.5, 0.8, density);
-        let cloud = mix(mix([0.86, 0.82, 0.94], [1.0, 0.98, 0.99], lit), [1.0, 0.88, 0.92], (1.0 - y).powf(4.0) * 0.5);
+        let cloud = mix(mix([0.84, 0.74, 0.88], [1.0, 0.92, 0.92], lit), [1.0, 0.82, 0.62], toward_sun.powf(4.0) * 0.8);
         color = mix(color, cloud, amount);
     }
 
-    // 4. Distant mountains around the horizon, drawn in front of the sky:
-    //    a far, pale range and a nearer, darker one dotted with pink trees.
-    //    The angle around the horizon is fed to the noise as a point on a
-    //    circle, so the ridge line joins up seamlessly all the way round.
+    // 5. Hazy islands on the horizon, sitting on the sea: a far, pale range
+    //    and a nearer, greener one dotted with pink trees. The angle around the
+    //    horizon is fed to the noise as a point on a circle, so the ridge line
+    //    joins up seamlessly all the way round.
     let angle = x.atan2(-z);
     let (ring_x, ring_z) = (angle.cos() * 2.5 + 20.0, angle.sin() * 2.5 + 20.0);
     // Heights are in "direction y" units: 0.1 is about 6° above the horizon.
-    let far_ridge = 0.04 + 0.26 * smoothstep(0.3, 0.72, fbm(ring_x, ring_z, 3));
-    let near_ridge = 0.01 + 0.13 * smoothstep(0.35, 0.72, fbm(ring_x * 1.7, ring_z * 1.7, 5));
-    if y < near_ridge && y > -0.06 {
-        let haze = smoothstep(-0.06, near_ridge, y);
-        color = mix([0.58, 0.54, 0.74], [0.7, 0.66, 0.84], haze);
+    let far_ridge = 0.02 + 0.2 * smoothstep(0.4, 0.75, fbm(ring_x, ring_z, 3));
+    let near_ridge = 0.01 + 0.1 * smoothstep(0.45, 0.75, fbm(ring_x * 1.7, ring_z * 1.7, 5));
+    if (0.0..near_ridge).contains(&y) {
+        let haze = smoothstep(0.0, near_ridge, y);
+        color = mix([0.42, 0.5, 0.56], [0.58, 0.62, 0.72], haze);
         if hash(((angle * 300.0) as i32, (y * 300.0) as i32), 9) > 0.93 {
-            color = [0.95, 0.66, 0.8]; // sakura on the far hills
+            color = [0.95, 0.66, 0.8]; // sakura on the islands
         }
-    } else if y < far_ridge && y > -0.06 {
-        color = mix([0.76, 0.72, 0.9], [0.86, 0.82, 0.95], smoothstep(-0.06, far_ridge, y));
+    } else if (0.0..far_ridge).contains(&y) {
+        color = mix(mix([0.66, 0.66, 0.8], horizon, 0.35), [0.82, 0.78, 0.9], smoothstep(0.0, far_ridge, y));
     }
     color
 }

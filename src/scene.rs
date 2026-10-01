@@ -157,13 +157,21 @@ impl Scene {
 
     /// The nearest block the ray hits between t_min and t_max.
     pub fn closest_hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
-        let mut closest = self.blocks.trace(ray, t_min, t_max);
-        let mut limit = closest.as_ref().map_or(t_max, |hit| hit.t);
+        let block_hit = self.blocks.trace(ray, t_min, t_max);
+        let limit = block_hit.as_ref().map_or(t_max, |hit| hit.t);
+        // A moving particle in front of the block wins.
+        self.closest_particle(ray, t_min, limit).or(block_hit)
+    }
 
-        // Small moving particles (falling petals) are not in the grid, so test
-        // them directly, with the Phase 3 slab method. To keep that cheap, each
-        // group sits inside one bounding box: if the ray misses the box (before
-        // the nearest block), it can't hit anything inside, and we skip them all.
+    /// The nearest moving particle (petal, koi) hit between t_min and t_max.
+    ///
+    /// Particles are not in the grid, so we test them directly, with the
+    /// Phase 3 slab method. To keep that cheap, each group (one tree's petals,
+    /// one fish) sits inside one bounding box: if the ray misses the box, it
+    /// can't hit anything inside, and we skip the whole group.
+    pub fn closest_particle(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
+        let mut closest = None;
+        let mut limit = t_max;
         for group in &self.particle_groups {
             let might_hit = group.bounds.contains(ray.at(t_min)) || group.bounds.intersect(ray, t_min, limit).is_some();
             if !might_hit {
@@ -215,7 +223,7 @@ impl Scene {
     /// Places a block only where there is air inside the world, so decorations
     /// (like tree canopies) never overwrite buildings or run off the edge.
     pub fn add_block_if_empty(&mut self, x: i32, y: i32, z: i32, material: usize) {
-        if self.blocks.contains([x, y, z]) && self.blocks.get([x, y, z]).is_none() {
+        if self.blocks.contains([x, y, z]) && self.blocks.is_empty([x, y, z]) {
             self.add_block(x, y, z, material);
         }
     }
@@ -236,6 +244,28 @@ impl Scene {
     }
 
     /// Turns every block from `from` to `to` (inclusive) into air.
+    // ---- Mini-blocks: 1/4 of a block on each side (see grid.rs). Positions
+    // ---- are in mini units, so mini (4, 8, 0) is the corner of block (1, 2, 0).
+
+    /// Fills every mini-block from `from` to `to` (mini units, both included).
+    pub fn fill_mini(&mut self, from: (i32, i32, i32), to: (i32, i32, i32), material: usize) {
+        for x in from.0..=to.0 {
+            for y in from.1..=to.1 {
+                for z in from.2..=to.2 {
+                    self.blocks.set_mini([x, y, z], Some(material as u8));
+                }
+            }
+        }
+    }
+
+    /// Places a mini-block only where there is empty space, so decorations
+    /// (bushes, overhanging lantern roofs) never cut into blocks.
+    pub fn add_mini_if_empty(&mut self, x: i32, y: i32, z: i32, material: usize) {
+        if self.blocks.mini_is_empty([x, y, z]) {
+            self.blocks.set_mini([x, y, z], Some(material as u8));
+        }
+    }
+
     pub fn clear(&mut self, from: (i32, i32, i32), to: (i32, i32, i32)) {
         for x in from.0..=to.0 {
             for y in from.1..=to.1 {

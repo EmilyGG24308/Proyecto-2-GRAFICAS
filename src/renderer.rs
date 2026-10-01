@@ -142,6 +142,11 @@ fn color_through(ray: &Ray, hit: &Hit, scene: &Scene, depth: u32) -> Color {
         let Some(boundary) = scene.exit_from(&inside_ray, hit.material) else {
             return sky(scene, inside_ray.direction); // left the world: shouldn't happen
         };
+        // Something moving inside the water (a koi) before that wall? Then that's
+        // what we see.
+        if let Some(fish) = scene.closest_particle(&inside_ray, 0.0, boundary.t) {
+            return shade_hit(&inside_ray, &fish, scene, depth + 1);
+        }
 
         match boundary.entered {
             // Something solid underwater (the pond floor, a koi, a rock): its own
@@ -294,7 +299,7 @@ fn is_in_shadow(scene: &Scene, hit: &Hit, to_sun: Vec3) -> bool {
 /// wave, the more the normal tilts. The derivative of A·sin(k·x + c) is
 /// A·k·cos(k·x + c), which is what each term below is.
 fn ripple_normal(point: Vec3, time: f32) -> Vec3 {
-    const HEIGHT: f32 = 0.04; // wave height, in blocks: small, so it stays calm
+    const HEIGHT: f32 = 0.02; // wave height, in blocks: small, so it stays calm
     let (x, z) = (point.x, point.z);
     let diagonal = (1.3 * (x + z) + 2.0 * time).cos();
     let slope_x = HEIGHT * (1.7 * (1.7 * x + 1.1 * time).cos() + 0.5 * 1.3 * diagonal);

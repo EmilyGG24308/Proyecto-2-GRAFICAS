@@ -140,6 +140,21 @@ impl BlockGrid {
         self.details[detail][(sx + MINI * sy + MINI * MINI * sz) as usize] = material;
     }
 
+    /// True if the mini-block at `mini` is inside the world and has nothing in it
+    /// (its cell is air, or a detail cell where that mini-block is air).
+    pub fn mini_is_empty(&self, mini: [i32; 3]) -> bool {
+        let world = mini.map(|m| m.div_euclid(MINI));
+        let [sx, sy, sz] = mini.map(|m| m.rem_euclid(MINI));
+        let Some(index) = self.index(self.world_to_cell(world)) else {
+            return false;
+        };
+        match self.cells[index] {
+            Cell::Air => true,
+            Cell::Block(_) => false,
+            Cell::Detail(detail) => self.details[detail as usize][(sx + MINI * sy + MINI * MINI * sz) as usize].is_none(),
+        }
+    }
+
     /// Whole blocks plus mini-blocks counted as fractions (64 minis = 1 block).
     pub fn block_count(&self) -> usize {
         self.cells
@@ -404,6 +419,9 @@ mod tests {
         for _ in 0..60 {
             let block = [0, 0, 0].map(|_: i32| (random() * 10.0) as i32 - 5);
             if random() < 0.5 {
+                if !grid.is_empty(block) {
+                    continue; // don't overwrite mini-blocks already recorded in `boxes`
+                }
                 grid.set(block, Some(1));
                 let min = Vec3::new(block[0] as f32, block[1] as f32, block[2] as f32);
                 boxes.push(Cube::new(min, min + Vec3::new(1.0, 1.0, 1.0), 1));

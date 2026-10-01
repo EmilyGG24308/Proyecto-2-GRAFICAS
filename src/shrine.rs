@@ -17,6 +17,7 @@ use crate::material::Material;
 use crate::controls::Controls;
 use crate::scene::{PointLight, Scene, Sun};
 use crate::world::World;
+use crate::grid::MINI;
 use crate::vec3::Vec3;
 
 /// Top block of the town ground and of the hill.
@@ -57,19 +58,26 @@ struct Materials {
     window: usize,
     awning: usize,
     concrete: usize,
+    koi_white: usize,
+    hydrangea: usize,
+    azalea: usize,
+    banner: usize,
+    red_lantern: usize,
+    guide_light: usize,
 }
 
 /// Builds the scene, plus the Animation that moves its petals and koi.
 pub fn build_shrine_world() -> World {
+    // Golden hour: a low sun off to the right, so light is warm and shadows long.
     let sun = Sun {
-        direction_to_sun: Vec3::new(0.35, 1.0, 0.8).normalized(),
-        color: Color::new(1.0, 0.95, 0.85), // warm afternoon sunlight
+        direction_to_sun: Vec3::new(0.8, 0.45, 0.35).normalized(),
+        color: Color::new(1.05, 0.84, 0.62),
     };
-    let ambient = Color::new(0.32, 0.33, 0.42); // cool, slightly blue sky light
+    let ambient = Color::new(0.38, 0.33, 0.45); // soft lavender sky light
     let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [64, 44, 64], sun, ambient);
     let m = add_materials(&mut scene);
-    // Pastel afternoon sky. Its painted sun matches `direction_to_sun` above
-    // (examples/make_skybox.rs uses the same direction).
+    // Golden-hour sky over the sea. Its painted sun matches `direction_to_sun`
+    // above (examples/make_skybox.rs uses the same direction).
     scene.load_skybox("sky");
 
     // Ground first, then things standing on it, then trees last: trees only
@@ -86,16 +94,19 @@ pub fn build_shrine_world() -> World {
     }
     for x in [-4, 4] {
         for z in [-16, -20] {
-            build_stone_lantern(&mut scene, &m, x, z);
+            build_stone_lantern(&mut scene, &m, x, HILL_TOP + 1, z);
         }
     }
     build_edge_wall(&mut scene, &m);
     build_pond_and_bridge(&mut scene, &m);
     build_cave_hill(&mut scene, &m);
+    build_guide_lights(&mut scene, &m);
+    build_shrine_decorations(&mut scene, &m);
     build_town(&mut scene, &m);
+    build_stair_banners(&mut scene, &m);
 
     // Sakura: (x, z, trunk height, canopy radius)
-    let mut animation = Animation::new(m.petal, m.koi, m.water);
+    let mut animation = Animation::new(m.petal, m.koi, m.koi_white);
     for (x, z, trunk, radius) in [(-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4), (-29, 16, 3, 3), (29, 18, 3, 3)] {
         let ground = surface_top(&scene, x, z);
         build_sakura_tree(&mut scene, &m, x, z, ground, trunk, radius);
@@ -110,16 +121,21 @@ pub fn build_shrine_world() -> World {
         let ground = surface_top(&scene, x, z);
         build_pine_tree(&mut scene, &m, x, z, ground, height);
     }
+    // Flowering bushes last: they only fill empty space, around everything else.
+    build_flower_bushes(&mut scene, &m);
     World { scene, animation, portal_material: m.portal, arrival }
 }
 
-/// Four koi circling the pond (center 15, -16) on ovals of different sizes,
-/// at two depths, some clockwise and some counterclockwise.
+/// Five koi circling the pond (center 15, -16) on ovals of different sizes,
+/// at two depths, some clockwise and some counterclockwise. The water's
+/// surface is at height HILL_TOP; the floor at HILL_TOP - 3.
 fn add_swimming_koi(animation: &mut Animation) {
-    animation.add_koi((15.0, -15.5), (5.0, 3.0), HILL_TOP - 2, 0.35, 0.0);
-    animation.add_koi((15.0, -15.5), (3.5, 2.2), HILL_TOP - 3, -0.45, 2.0);
-    animation.add_koi((13.0, -14.0), (2.5, 1.5), HILL_TOP - 2, 0.6, 4.0);
-    animation.add_koi((17.0, -16.5), (3.0, 2.0), HILL_TOP - 3, -0.3, 1.0);
+    let (shallow, deep) = (HILL_TOP as f32 - 0.6, HILL_TOP as f32 - 1.6);
+    animation.add_koi((15.0, -15.5), (5.0, 3.0), shallow, 0.35, 0.0);
+    animation.add_koi((15.0, -15.5), (3.5, 2.2), deep, -0.45, 2.0);
+    animation.add_koi((13.0, -14.0), (2.5, 1.5), shallow, 0.6, 4.0);
+    animation.add_koi((17.0, -16.5), (3.0, 2.0), deep, -0.3, 1.0);
+    animation.add_koi((14.0, -15.0), (4.5, 2.5), deep, 0.25, 5.5);
 }
 
 fn add_materials(scene: &mut Scene) -> Materials {
@@ -169,6 +185,15 @@ fn add_materials(scene: &mut Scene) -> Materials {
     // Falling petals: the blossom texture with a soft glow, so they stay pink
     // in the shade (standing in for sunlight shining through thin petals).
     let petal = scene.add_material(Material { glow: 0.5, ..Material::opaque(sakura_texture, 0.95, 0.05, 4.0) });
+    // Koi: wet, slightly shiny scales, orange with white patches. A little glow
+    // keeps them bright and readable under the water, even in the trees' shade.
+    let koi_texture = scene.load_texture("koi");
+    let koi = scene.add_material(Material { glow: 0.45, ..Material::opaque(koi_texture, 0.95, 0.3, 32.0) });
+    let white_texture = scene.load_texture("plaster");
+    let koi_white = scene.add_material(Material { glow: 0.35, ..Material::opaque(white_texture, 1.0, 0.3, 32.0) });
+    // Red paper lanterns hanging from the hall's eaves.
+    let red_lantern_texture = scene.load_texture("red_lantern");
+    let red_lantern = scene.add_material(Material { glow: 0.5, ..Material::opaque(red_lantern_texture, 0.95, 0.1, 8.0) });
     // Lantern paper glows a little, even by day.
     let paper_texture = scene.load_texture("paper");
     let paper = scene.add_material(Material { glow: 0.25, ..Material::opaque(paper_texture, 0.95, 0.0, 1.0) });
@@ -197,6 +222,12 @@ fn add_materials(scene: &mut Scene) -> Materials {
     });
     let foxfire_texture = scene.load_texture("foxfire");
     let foxfire = scene.add_material(Material { glow: 1.2, ..Material::opaque(foxfire_texture, 0.9, 0.2, 16.0) });
+    // Glowing guide lights: soft cyan orbs that lead to the cave.
+    let guide_light_texture = scene.load_texture("plaster");
+    let guide_light = scene.add_material(Material {
+        glow: 1.0,
+        ..Material::opaque(guide_light_texture, 0.95, 0.6, 32.0)
+    });
     // Window glass: opaque (the houses are solid), but it mirrors the sky.
     let window_texture = scene.load_texture("window");
     let window = scene.add_material(Material {
@@ -230,12 +261,18 @@ fn add_materials(scene: &mut Scene) -> Materials {
         road: textured("road", 0.9, 0.0, 1.0),
         paper,
         petal,
-        koi: textured("koi", 0.95, 0.3, 32.0), // wet, slightly shiny scales
+        koi,
         portal,
         foxfire,
+        red_lantern,
         window,
         awning: textured("awning", 0.9, 0.05, 8.0),
         concrete: textured("concrete", 0.9, 0.05, 8.0),
+        koi_white,
+        hydrangea: textured("hydrangea", 0.95, 0.02, 4.0),
+        azalea: textured("azalea", 0.95, 0.02, 4.0),
+        banner: textured("banner", 0.95, 0.0, 1.0),
+        guide_light,
     }
 }
 
@@ -296,7 +333,7 @@ fn build_staircase(scene: &mut Scene, m: &Materials) {
             scene.clear((x, step_top + 2, z), (x, HILL_TOP + 2, z));
             scene.fill((x, step_top, z), (x, step_top + 1, z), m.path_stone);
             if (z - SLOPE_START) % 4 == 2 {
-                scene.add_block(x, step_top + 2, z, m.paper); // a little lantern on the wall
+                build_small_lantern(scene, m, x, step_top + 2, z); // sitting on the wall
             }
         }
     }
@@ -325,8 +362,9 @@ fn build_hilltop_paths(scene: &mut Scene, m: &Materials) {
     scene.fill((-5, HILL_TOP, -22), (5, HILL_TOP, -19), m.path_stone); // plaza
     scene.fill((6, HILL_TOP, -20), (7, HILL_TOP, -18), m.path_stone); // plaza → bridge
 
-    // The cave trail: 2-wide stepping stones through a list of turning points.
-    let turns: [(i32, i32); 5] = [(-3, -10), (-11, -9), (-18, -13), (-22, -19), (-23, -23)];
+    // The cave trail: 2-wide stepping stones through a list of turning points,
+    // ending at the cave's torii.
+    let turns: [(i32, i32); 5] = [(-3, -10), (-11, -9), (-17, -11), (-23, -12), (-23, -15)];
     for pair in turns.windows(2) {
         let ((x0, z0), (x1, z1)) = (pair[0], pair[1]);
         let steps = (x1 - x0).abs().max((z1 - z0).abs());
@@ -405,6 +443,14 @@ fn build_shrine_hall(scene: &mut Scene, m: &Materials) {
     for x in [-9, 9] {
         scene.fill((x, ridge + 1, -27), (x, ridge + 1, -26), m.dark_wood);
     }
+
+    // Red paper lanterns hanging under the front eave (mini-blocks: 2 wide,
+    // 3 tall, with a dark cap where they hang from the roof).
+    for x in [-6, -2, 2, 6] {
+        let (mx, my, mz) = (x * MINI + 1, wall_top * MINI, -22 * MINI + 1);
+        scene.fill_mini((mx, my, mz), (mx + 1, my + 2, mz + 1), m.red_lantern);
+        scene.fill_mini((mx, my + 3, mz), (mx + 1, my + 3, mz + 1), m.dark_wood);
+    }
 }
 
 /// Temizuya: a stone basin of water under a small roof on four red posts.
@@ -430,12 +476,96 @@ fn build_guardian_statue(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
     scene.add_block(x, y + 2, z, m.path_stone); // head
 }
 
-/// Stone lantern (toro): base, post, glowing paper light box, stone cap.
-fn build_stone_lantern(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
-    let y = HILL_TOP + 1;
-    scene.fill((x, y, z), (x, y + 1, z), m.rock);
-    scene.add_block(x, y + 2, z, m.paper);
-    scene.add_block(x, y + 3, z, m.path_stone);
+// ============================ Mini-block details ============================
+// Positions inside these functions are in mini-blocks (MINI = 4 per block):
+// block (x, y, z) starts at mini (4x, 4y, 4z).
+
+/// Stone lantern (toro), standing in block (x, y, z) and the one above it:
+/// a wide base, a thin post, a glowing paper fire-box with stone corners, a
+/// roof that sticks out on every side, and a small knob on top.
+fn build_stone_lantern(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
+    scene.fill_mini((bx, by, bz), (bx + 3, by, bz + 3), m.rock); // base
+    scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 3, bz + 2), m.rock); // post
+    scene.fill_mini((bx, by + 4, bz), (bx + 3, by + 5, bz + 3), m.paper); // fire-box
+    for (cx, cz) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
+        scene.fill_mini((bx + cx, by + 4, bz + cz), (bx + cx, by + 5, bz + cz), m.rock); // its corners
+    }
+    // Roof: one mini-block wider than the lantern on every side.
+    for mx in bx - 1..=bx + 4 {
+        for mz in bz - 1..=bz + 4 {
+            scene.add_mini_if_empty(mx, by + 6, mz, m.path_stone);
+        }
+    }
+    scene.fill_mini((bx, by + 7, bz), (bx + 3, by + 7, bz + 3), m.path_stone);
+    scene.fill_mini((bx + 1, by + 8, bz + 1), (bx + 2, by + 8, bz + 2), m.rock); // knob
+}
+
+/// A small lantern for the top of a wall: stone foot, paper light, stone cap.
+fn build_small_lantern(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
+    scene.fill_mini((bx + 1, by, bz + 1), (bx + 2, by, bz + 2), m.rock);
+    scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 2, bz + 2), m.paper);
+    scene.fill_mini((bx, by + 3, bz), (bx + 3, by + 3, bz + 3), m.path_stone);
+}
+
+/// A nobori banner standing in block (x, y, z): a thin dark pole, a top bar,
+/// and a tall strip of cloth hanging from it, facing along X (toward the stairs).
+fn build_banner(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
+    scene.fill_mini((bx + 2, by, bz + 1), (bx + 2, by + 15, bz + 1), m.dark_wood); // pole, 4 blocks tall
+    scene.fill_mini((bx + 2, by + 14, bz + 1), (bx + 2, by + 14, bz + 3), m.dark_wood); // top bar
+    scene.fill_mini((bx + 2, by + 4, bz + 2), (bx + 2, by + 13, bz + 3), m.banner); // cloth
+}
+
+/// Banners along both sides of the staircase, between the wall lanterns.
+fn build_stair_banners(scene: &mut Scene, m: &Materials) {
+    for z in (SLOPE_START + 3..=SLOPE_END).step_by(4) {
+        for x in [-4, 4] {
+            let ground = surface_top(scene, x, z);
+            build_banner(scene, m, x, ground + 1, z);
+        }
+    }
+}
+
+/// A rounded flowering bush about 2 blocks wide, made of mini-blocks: leaves
+/// inside and low down, flowers on the upper outside, with a ragged edge.
+fn build_bush(scene: &mut Scene, m: &Materials, x: i32, z: i32, flower: usize) {
+    let ground = surface_top(scene, x, z);
+    let (cx, base, cz) = (x * MINI + 2, (ground + 1) * MINI, z * MINI + 2);
+    for dx in -4i32..=4 {
+        for dy in 0i32..=4 {
+            for dz in -4i32..=4 {
+                // Inside a squashed half-ball: (dx/4.5)² + (dy/4.5)² + (dz/4.5)² ≤ 1
+                let distance = ((dx * dx + dy * dy + dz * dz) as f32).sqrt() / 4.5;
+                let (mx, my, mz) = (cx + dx, base + dy, cz + dz);
+                let roll = noise(mx, my, mz);
+                if distance > 1.0 || (distance > 0.75 && roll < 35) {
+                    continue;
+                }
+                let material = if dy >= 2 && roll % 3 != 0 { flower } else { m.leaves };
+                scene.add_mini_if_empty(mx, my, mz, material);
+            }
+        }
+    }
+}
+
+fn build_flower_bushes(scene: &mut Scene, m: &Materials) {
+    let (blue, pink) = (m.hydrangea, m.azalea);
+    for (x, z, flower) in [
+        // Along the approach and in front of the hall.
+        (-7, -11, blue), (6, -11, pink), (-7, -21, pink), (7, -21, blue), (-11, -26, blue), (11, -23, pink),
+        // Around the pond.
+        (8, -12, blue), (12, -9, pink), (18, -9, blue), (24, -15, pink),
+        // Beside the stairs on the hillside.
+        (-6, -4, pink), (6, -3, blue), (-6, 2, blue), (6, 3, pink),
+        // At the cave entrance.
+        (-19, -14, pink), (-27, -14, blue),
+        // Front gardens in town.
+        (-12, 18, pink), (8, 18, blue), (21, 18, pink), (-22, 18, blue), (-8, 23, blue), (10, 23, pink),
+    ] {
+        build_bush(scene, m, x, z, flower);
+    }
 }
 
 // ============================ Pond and cave ============================
@@ -470,23 +600,68 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     for x in 6..=24 {
         let from_end = (x - 6).min(24 - x);
         let deck = HILL_TOP + 1 + (from_end / 2).min(2);
-        scene.add_block(x, deck, -19, m.shrine_wood);
-        for z in [-20, -18] {
-            scene.add_block(x, deck, z, m.shrine_wood);
-            scene.add_block(x, deck + 1, z, m.lacquer); // red railings
+        scene.fill((x, deck, -20), (x, deck, -18), m.shrine_wood);
+        // Red railings along both outer edges, made of mini-blocks: a post
+        // every two blocks and a thin handrail on top.
+        let top = (deck + 1) * MINI;
+        for rail_z in [-20 * MINI, -18 * MINI + 3] {
+            if x % 2 == 0 {
+                scene.fill_mini((x * MINI + 1, top, rail_z), (x * MINI + 2, top + 2, rail_z), m.lacquer);
+            }
+            scene.fill_mini((x * MINI, top + 3, rail_z), (x * MINI + 3, top + 3, rail_z), m.lacquer);
         }
     }
 }
 
-/// A mossy rock hill in the back-left corner, with a tunnel leading to a
-/// small hidden chamber (the portal goes there later).
+/// Glowing orbs along the path from the temple to the cave, guiding explorers
+/// to discover what's inside. Each orb is a small glowing sphere made of mini-blocks.
+fn build_guide_lights(scene: &mut Scene, m: &Materials) {
+    let positions = [
+        (-3, HILL_TOP + 1, -8),   // near shrine
+        (-8, HILL_TOP + 1, -9),
+        (-14, HILL_TOP + 1, -10),
+        (-20, HILL_TOP + 1, -11),
+        (-23, HILL_TOP + 1, -12), // near cave entrance
+    ];
+
+    for (x, y, z) in positions {
+        // Small glowing sphere: 2×2×2 blocks using mini-blocks for that cute glow effect
+        let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
+        scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 2, bz + 2), m.guide_light);
+    }
+}
+
+/// More lanterns and flowers around the shrine area to make it feel grander
+/// and more detailed: lanterns lighting the pathways and flower beds.
+fn build_shrine_decorations(scene: &mut Scene, m: &Materials) {
+    // Additional lanterns around the main shrine paths for more ambiance
+    for (x, z) in [(-10, -18), (10, -18), (-12, -12), (12, -12), (-6, -8), (6, -8)] {
+        build_stone_lantern(scene, m, x, HILL_TOP + 1, z);
+    }
+
+    // More flowering bushes scattered around: hydrangea and azalea clusters
+    let flower_positions = [
+        (8, -20), (-8, -20), (15, -25), (-15, -25), (5, -15), (-5, -15),
+        (11, -12), (-11, -12), (18, -22), (-18, -22),
+    ];
+
+    for (x, z) in flower_positions {
+        // 60% hydrangea, 40% azalea for variety
+        let flower_type = if noise(x, 11, z) % 10 < 6 { m.hydrangea } else { m.azalea };
+        build_bush(scene, m, x, z, flower_type);
+    }
+}
+
+/// A mossy rock hill in the back-left corner. A straight tunnel runs into it
+/// from the front, and the portal glows at its far end, so you can see the
+/// light from the shrine grounds. A red torii and lanterns mark the way.
 fn build_cave_hill(scene: &mut Scene, m: &Materials) {
-    for x in EDGE_MIN..=-16 {
-        for z in EDGE_MIN..=-16 {
+    for x in EDGE_MIN..=-11 {
+        for z in EDGE_MIN..=-11 {
             // Tallest at the corner, sloping down toward the shrine grounds.
             // The square root rounds the top off, so it's a mound, not a cone.
             let distance = (((x - EDGE_MIN) * (x - EDGE_MIN) + (z - EDGE_MIN) * (z - EDGE_MIN)) as f32).sqrt();
-            let rise = (1.0 - distance / 17.0).max(0.0).sqrt() * 10.0;
+            let rise = (1.0 - distance / 21.0).max(0.0).sqrt() * 11.0;
             let height = (rise + (noise(x, 5, z) % 2) as f32).floor() as i32;
             if height <= 0 {
                 continue;
@@ -495,44 +670,49 @@ fn build_cave_hill(scene: &mut Scene, m: &Materials) {
             scene.add_block(x, HILL_TOP + height, z, m.moss_rock);
         }
     }
-    // Tunnel along the diagonal from the trail's end toward the corner,
-    // 3 wide and 3 tall, opening into a 5×5×4 chamber.
-    for i in 0..6 {
-        let (x, z) = (-23 - i, -23 - i);
-        scene.clear((x - 1, HILL_TOP + 1, z), (x + 1, HILL_TOP + 3, z));
-        scene.clear((x, HILL_TOP + 1, z - 1), (x, HILL_TOP + 3, z + 1));
-    }
-    scene.clear((-30, HILL_TOP + 1, -30), (-26, HILL_TOP + 4, -26));
-    // Hanging moss over the entrance.
-    for (x, z) in [(-22, -24), (-24, -22), (-23, -23)] {
-        scene.add_block_if_empty(x, HILL_TOP + 3, z, m.leaves);
+
+    // The tunnel: 3 wide, 3 tall, straight back along -Z from the hill's front.
+    let (tunnel_x0, tunnel_x1, portal_z) = (-24, -22, -26);
+    scene.clear((tunnel_x0, HILL_TOP + 1, portal_z + 1), (tunnel_x1, HILL_TOP + 3, -14));
+    scene.fill((tunnel_x0, HILL_TOP, portal_z + 1), (tunnel_x1, HILL_TOP, -14), m.path_stone); // its floor
+
+    // The portal fills the tunnel's far end. Clicking it travels to the spirit world.
+    scene.fill((tunnel_x0, HILL_TOP + 1, portal_z), (tunnel_x1, HILL_TOP + 3, portal_z), m.portal);
+    // Its violet light fills the tunnel and spills out of the entrance.
+    scene.point_lights.push(PointLight {
+        position: Vec3::new(-22.5, HILL_TOP as f32 + 2.5, portal_z as f32 + 2.5),
+        color: Color::new(1.0, 0.55, 1.4),
+        radius: 12.0,
+    });
+
+    // Blue fox-fire crystals in little clusters along the tunnel walls.
+    for (x, z) in [(-24, -17), (-22, -20), (-24, -23)] {
+        let (bx, by, bz) = (x * MINI, (HILL_TOP + 1) * MINI, z * MINI);
+        let inner = if x == tunnel_x0 { bx } else { bx + 2 }; // against the wall
+        scene.fill_mini((inner, by, bz + 1), (inner + 1, by + 2, bz + 2), m.foxfire);
+        scene.add_mini_if_empty(inner, by, bz + 3, m.foxfire);
     }
 
-    // The portal: a 3×3 glowing sheet against the chamber's back wall,
-    // facing the tunnel. Clicking it travels to the spirit world.
-    scene.fill((-30, HILL_TOP + 1, -29), (-30, HILL_TOP + 3, -27), m.portal);
-    // Its violet light fills the chamber and spills down the tunnel.
-    scene.point_lights.push(PointLight {
-        position: Vec3::new(-28.0, HILL_TOP as f32 + 2.5, -27.5),
-        color: Color::new(0.9, 0.5, 1.3),
-        radius: 10.0,
-    });
-    // Blue fox-fire crystals on the tunnel floor: a faint trail of glow
-    // leading inside, with a soft blue light over them.
-    for (x, z) in [(-24, -25), (-25, -24), (-27, -26), (-26, -28)] {
-        scene.add_block(x, HILL_TOP + 1, z, m.foxfire);
+    // Hanging moss along the entrance.
+    for x in tunnel_x0..=tunnel_x1 {
+        let (bx, by, bz) = (x * MINI, (HILL_TOP + 3) * MINI, -15 * MINI);
+        for dx in 0..MINI {
+            let length = 1 + (noise(bx + dx, 9, bz) % 3) as i32;
+            scene.fill_mini((bx + dx, by + MINI - length, bz + 3), (bx + dx, by + MINI - 1, bz + 3), m.leaves);
+        }
     }
-    scene.point_lights.push(PointLight {
-        position: Vec3::new(-24.5, HILL_TOP as f32 + 2.5, -24.5),
-        color: Color::new(0.3, 0.6, 1.2),
-        radius: 5.0,
-    });
+
+    // A small red torii in front of the entrance, and lanterns leading to it.
+    build_torii(scene, m, -23, -13, HILL_TOP + 1, 2, 4);
+    for (x, z) in [(-9, -11), (-15, -9), (-20, -10), (-21, -14), (-27, -11)] {
+        build_stone_lantern(scene, m, x, HILL_TOP + 1, z);
+    }
 }
 
-/// Arriving back from the spirit world: just outside the cave mouth,
+/// Arriving back from the spirit world: in front of the cave's torii,
 /// looking out over the shrine grounds.
 pub fn arrival() -> Controls {
-    Controls::new(Vec3::new(-18.5, HILL_TOP as f32 + 4.0, -18.5), Vec3::new(-8.0, HILL_TOP as f32 + 1.5, -8.0), 60.0)
+    Controls::new(Vec3::new(-22.5, HILL_TOP as f32 + 3.5, -10.0), Vec3::new(-5.0, HILL_TOP as f32 + 1.5, -18.0), 60.0)
 }
 
 // ============================ Town ============================

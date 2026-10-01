@@ -1,4 +1,6 @@
-//! Things that move: falling sakura petals and swimming koi.
+//! Things that move: falling sakura petals and swimming koi. Both are small
+//! cubes that live outside the block grid ("particles"), so they can move
+//! smoothly instead of jumping a whole block at a time.
 //! (Water ripples are done while shading, in renderer.rs.)
 //!
 //! Everything is a function of TIME, not of the previous frame: given the
@@ -29,30 +31,29 @@ struct SwimmingKoi {
     center_z: f32,
     radius_x: f32,
     radius_z: f32,
-    depth: i32, // the y of the water layer it swims in
+    depth: f32, // height of the fish's middle
     speed: f32, // radians per second around the oval; negative = the other way
     phase: f32,
-    /// Grid cells the fish occupies right now (head and tail).
-    cells: Vec<[i32; 3]>,
 }
 
 pub struct Animation {
     petal_trees: Vec<Vec<FallingPetal>>,
     koi: Vec<SwimmingKoi>,
     petal_material: usize,
-    koi_material: usize,
-    water_material: usize,
+    /// Koi are orange with white patches.
+    koi_orange: usize,
+    koi_white: usize,
     random_state: u32,
 }
 
 impl Animation {
-    pub fn new(petal_material: usize, koi_material: usize, water_material: usize) -> Animation {
+    pub fn new(petal_material: usize, koi_orange: usize, koi_white: usize) -> Animation {
         Animation {
             petal_trees: Vec::new(),
             koi: Vec::new(),
             petal_material,
-            koi_material,
-            water_material,
+            koi_orange,
+            koi_white,
             random_state: 2024,
         }
     }
@@ -82,7 +83,7 @@ impl Animation {
         self.petal_trees.push(petals);
     }
 
-    pub fn add_koi(&mut self, center: (f32, f32), radii: (f32, f32), depth: i32, speed: f32, phase: f32) {
+    pub fn add_koi(&mut self, center: (f32, f32), radii: (f32, f32), depth: f32, speed: f32, phase: f32) {
         self.koi.push(SwimmingKoi {
             center_x: center.0,
             center_z: center.1,
@@ -91,63 +92,72 @@ impl Animation {
             depth,
             speed,
             phase,
-            cells: Vec::new(),
         });
     }
 
-    /// Moves everything to where it should be at `time` seconds.
+    /// Moves everything to where it should be at `time` seconds: rebuilds the
+    /// scene's list of moving particles (one group per tree, one per fish).
     pub fn update(&mut self, scene: &mut Scene, time: f32) {
         scene.time = time;
-        self.place_petals(scene, time);
-        self.move_koi(scene, time);
-    }
-
-    fn place_petals(&self, scene: &mut Scene, time: f32) {
         scene.particle_groups.clear();
         for tree in &self.petal_trees {
-            let particles: Vec<Cube> = tree.iter().map(|petal| petal_cube(petal, time, self.petal_material)).collect();
-            // The group's box: the smallest box containing all its petals.
-            let mut min = particles[0].min;
-            let mut max = particles[0].max;
-            for particle in &particles {
-                min = Vec3::new(min.x.min(particle.min.x), min.y.min(particle.min.y), min.z.min(particle.min.z));
-                max = Vec3::new(max.x.max(particle.max.x), max.y.max(particle.max.y), max.z.max(particle.max.z));
-            }
-            scene.particle_groups.push(ParticleGroup { bounds: Cube::new(min, max, 0), particles });
+            let petals = tree.iter().map(|petal| petal_cube(petal, time, self.petal_material)).collect();
+            scene.particle_groups.push(group_of(petals));
+        }
+        for koi in &self.koi {
+            scene.particle_groups.push(group_of(self.koi_cubes(koi, time)));
         }
     }
 
-    /// Each fish: put its old cells back to water, work out where it is now on
-    /// its oval, and fill the new cells (head, plus a tail one block behind).
-    /// Cells are only taken if they are water, so fish never swim into rocks.
-    fn move_koi(&mut self, scene: &mut Scene, time: f32) {
-        for koi in &mut self.koi {
-            for [x, y, z] in koi.cells.drain(..) {
-                scene.add_block(x, y, z, self.water_material);
-            }
-            let angle = time * koi.speed + koi.phase;
-            let x = koi.center_x + koi.radius_x * angle.cos();
-            let z = koi.center_z + koi.radius_z * angle.sin();
-            // Swimming direction = how the position changes as the angle grows.
-            let heading_x = -koi.radius_x * angle.sin() * koi.speed.signum();
-            let heading_z = koi.radius_z * angle.cos() * koi.speed.signum();
+    /// A koi built from small cubes (about mini-block size), laid out along its
+    /// swimming direction: a white head, a two-tone body, little side fins, and
+    /// a forked tail that wags from side to side.
+    ///
+    /// The cubes themselves never rotate (they stay lined up with the axes,
+    /// like every block), but their POSITIONS follow the heading, so from
+    /// above the fish clearly points the way it swims, at any angle.
+    fn koi_cubes(&self, koi: &SwimmingKoi, time: f32) -> Vec<Cube> {
+        let angle = time * koi.speed + koi.phase;
+        let center = Vec3::new(koi.center_x + koi.radius_x * angle.cos(), koi.depth, koi.center_z + koi.radius_z * angle.sin());
+        // Swimming direction = how the position changes as the angle grows.
+        let heading = Vec3::new(-koi.radius_x * angle.sin(), 0.0, koi.radius_z * angle.cos()) * koi.speed.signum();
+        let forward = heading.normalized();
+        let side = Vec3::new(forward.z, 0.0, -forward.x); // horizontal, perpendicular to forward
+        let wag = (time * 7.0 + koi.phase).sin() * 0.06;
 
-            let head = [x.floor() as i32, koi.depth, z.floor() as i32];
-            // The tail goes one block behind the head, along whichever axis
-            // the fish is mostly swimming (blocks can only line up with X or Z).
-            let tail = if heading_x.abs() > heading_z.abs() {
-                [head[0] - heading_x.signum() as i32, head[1], head[2]]
-            } else {
-                [head[0], head[1], head[2] - heading_z.signum() as i32]
-            };
-            for cell in [head, tail] {
-                if scene.blocks.get(cell) == Some(self.water_material as u8) {
-                    scene.add_block(cell[0], cell[1], cell[2], self.koi_material);
-                    koi.cells.push(cell);
-                }
-            }
-        }
+        let (orange, white) = (self.koi_orange, self.koi_white);
+        // (distance along the fish, distance to the side, cube size, material)
+        let parts = [
+            (0.32, 0.0, 0.17, white),   // head
+            (0.14, 0.0, 0.22, orange),  // front of the body
+            (-0.04, 0.0, 0.22, white),  // white patch
+            (-0.2, 0.0, 0.18, orange),  // back of the body
+            (0.12, 0.16, 0.08, white),  // side fins
+            (0.12, -0.16, 0.08, white),
+            (-0.36, 0.07 + wag, 0.11, orange), // forked tail
+            (-0.36, -0.07 + wag, 0.11, orange),
+        ];
+        const FISH_SCALE: f32 = 1.5; // the numbers above are for a fish ~0.8 blocks long
+        parts
+            .iter()
+            .map(|&(along, across, size, material)| {
+                let position = center + forward * (along * FISH_SCALE) + side * (across * FISH_SCALE);
+                let half = Vec3::new(size, size * 0.8, size) * (0.5 * FISH_SCALE); // a little flatter than wide
+                Cube::new(position - half, position + half, material)
+            })
+            .collect()
     }
+}
+
+/// Wraps particles in a group with the smallest box that contains them all.
+fn group_of(particles: Vec<Cube>) -> ParticleGroup {
+    let mut min = particles[0].min;
+    let mut max = particles[0].max;
+    for particle in &particles {
+        min = Vec3::new(min.x.min(particle.min.x), min.y.min(particle.min.y), min.z.min(particle.min.z));
+        max = Vec3::new(max.x.max(particle.max.x), max.y.max(particle.max.y), max.z.max(particle.max.z));
+    }
+    ParticleGroup { bounds: Cube::new(min, max, 0), particles }
 }
 
 /// Where a petal is at `time`. It falls at a steady speed, sways in a little

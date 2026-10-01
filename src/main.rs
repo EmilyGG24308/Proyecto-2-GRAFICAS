@@ -198,7 +198,8 @@ fn main() {
 
 /// The overview the program starts with (and R returns to).
 fn starting_controls() -> Controls {
-    Controls::new(Vec3::new(62.0, 56.0, 74.0), Vec3::new(0.0, 12.0, -6.0), 40.0)
+    // First-person POV in front of the temple, looking back toward the shrine and town
+    Controls::new(Vec3::new(0.0, 18.0, 20.0), Vec3::new(0.0, 16.0, -10.0), 50.0)
 }
 
 

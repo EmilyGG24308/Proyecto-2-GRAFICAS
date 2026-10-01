@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn aiming_at_the_cave_portal_hits_the_portal() {
         let world = crate::shrine::build_shrine_world();
-        // Standing in the cave chamber, facing the back wall.
-        assert!(crosshair_hits_portal(&world, Vec3::new(-27.5, 20.5, -27.5), Vec3::new(-31.0, 20.5, -27.5)));
+        // Standing in front of the cave's torii, looking straight down the tunnel.
+        assert!(crosshair_hits_portal(&world, Vec3::new(-22.5, 20.5, -11.0), Vec3::new(-22.5, 20.5, -30.0)));
     }
 }
