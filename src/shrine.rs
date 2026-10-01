@@ -838,6 +838,21 @@ fn build_house(scene: &mut Scene, m: &Materials, h: &House) {
     let door_x = (h.x0 + h.x1) / 2;
     scene.fill((door_x, bottom, front_z), (door_x, bottom + 1, front_z), m.dark_wood);
 
+    // Mini-block decorative window frames and details
+    for x in h.x0..=h.x1 {
+        for floor in 0..h.floors {
+            let floor_y = bottom + floor * floor_height;
+            for y_offset in 1..=2 {
+                if scene.blocks.get([x, floor_y + y_offset, h.z0]) == Some(m.window as u8) {
+                    let (bx, by, bz) = (x * MINI, (floor_y + y_offset) * MINI, h.z0 * MINI);
+                    // Window frame detail using dark wood
+                    scene.fill_mini((bx, by, bz), (bx + 3, by + 3, bz), m.dark_wood);
+                    scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 2, bz - 1), m.window);
+                }
+            }
+        }
+    }
+
     build_gable_roof(scene, h.roof, h.x0, h.x1, h.z0, h.z1, top + 1);
 }
 
