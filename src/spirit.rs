@@ -128,6 +128,7 @@ pub fn build_spirit_world() -> World {
     }
 
     build_small_stalls(&mut scene, &m);
+    build_central_stage(&mut scene, &m);
     build_spirit_orb(&mut scene, &m);
     build_portal_gate(&mut scene, &m);
     for (x, z) in [(-9, 19), (7, 16)] {
@@ -344,6 +345,46 @@ fn build_glowing_sakura(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
             }
         }
     }
+}
+
+/// Central performance stage with tall lantern tower and spectator platforms
+fn build_central_stage(scene: &mut Scene, m: &Materials) {
+    let center_x = 0;
+    let center_z = 0;
+
+    // Raised stage platform
+    scene.fill((center_x - 3, GROUND_TOP + 1, center_z - 3), (center_x + 3, GROUND_TOP + 1, center_z + 3), m.lacquer);
+
+    // Decorative posts at corners
+    for (dx, dz) in [(-3, -3), (3, -3), (-3, 3), (3, 3)] {
+        for dy in 0..3 {
+            scene.add_block(center_x + dx, GROUND_TOP + 1 + dy, center_z + dz, m.dark_wood);
+        }
+    }
+
+    // Grand central lantern tower (8 blocks tall with multiple lanterns)
+    for dy in 0..8 {
+        scene.add_block(center_x, GROUND_TOP + 2 + dy, center_z, m.dark_wood);
+        if dy % 2 == 0 && dy > 0 {
+            // Lanterns jutting out at intervals
+            for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                scene.add_block(center_x + dx, GROUND_TOP + 2 + dy, center_z + dz, m.lantern);
+                scene.point_lights.push(PointLight {
+                    position: Vec3::new((center_x + dx) as f32 + 0.5, (GROUND_TOP + 3 + dy) as f32, (center_z + dz) as f32 + 0.5),
+                    color: Color::new(1.4, 0.7, 0.4),
+                    radius: 12.0,
+                });
+            }
+        }
+    }
+
+    // Top lantern crown
+    scene.add_block(center_x, GROUND_TOP + 9, center_z, m.lantern);
+    scene.point_lights.push(PointLight {
+        position: Vec3::new(center_x as f32 + 0.5, (GROUND_TOP + 10) as f32, center_z as f32 + 0.5),
+        color: Color::new(1.5, 0.8, 0.5),
+        radius: 15.0,
+    });
 }
 
 /// Small vendor stalls and food shops scattered in the alley streets
