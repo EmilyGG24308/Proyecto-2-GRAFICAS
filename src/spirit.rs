@@ -85,46 +85,38 @@ pub fn build_spirit_world() -> World {
         build_teahouse(&mut scene, &m, (6, z0, 12, z1), 2, Front::MinusX);
     }
 
-    // Many lantern strings across the street: every 6-7 blocks for atmosphere
-    for z in (-30..=20).step_by(7) {
-        for x in (-20..=20).step_by(2) {
+    // Lantern strings across the street (reduced for optimization)
+    for z in (-30..=20).step_by(10) {
+        for x in (-18..=18).step_by(3) {
             scene.add_block(x, GROUND_TOP + 12, z, m.lantern);
-        }
-        for x in [-18, -10, -2, 6, 14] {
             add_lantern_light(&mut scene, x, GROUND_TOP + 12, z);
         }
     }
 
-    // Red lanterns on building corners for more ambient light
-    for z in (-35..=18).step_by(8) {
-        for x in [-24, -18, 18, 24] {
+    // Red lanterns on building corners (reduced)
+    for z in (-35..=18).step_by(12) {
+        for x in [-26, 26] {
             scene.add_block(x, GROUND_TOP + 3, z, m.lantern);
             add_lantern_light(&mut scene, x, GROUND_TOP + 4, z);
         }
     }
 
-    // Extra lantern poles on street corners for dramatic red-light district vibe
-    for (x, z) in [(-28, -15), (28, -15), (-28, 8), (28, 8)] {
+    // Lantern poles at street corners (reduced from 4 to 2)
+    for (x, z) in [(-28, -10), (28, 10)] {
         for dy in 0..3 {
             scene.add_block(x, GROUND_TOP + 2 + dy, z, m.dark_wood);
         }
         scene.add_block(x, GROUND_TOP + 5, z, m.lantern);
-        scene.add_block(x + 1, GROUND_TOP + 5, z, m.lantern);
-        scene.add_block(x, GROUND_TOP + 5, z + 1, m.lantern);
         add_lantern_light(&mut scene, x, GROUND_TOP + 6, z);
-        add_lantern_light(&mut scene, x + 1, GROUND_TOP + 6, z);
     }
 
-    // Small paper lanterns on alley posts (10 more) for deep atmospheric detail
-    for (x, z) in [(-20, -20), (-20, 0), (-20, 15), (20, -20), (20, 0), (20, 15),
-                    (-8, -30), (8, -30), (-8, 25), (8, 25)] {
+    // Corner lanterns (reduced from 10 to 6)
+    for (x, z) in [(-20, -20), (20, -20), (-20, 20), (20, 20), (0, -30), (0, 25)] {
         for dy in 1..3 {
             scene.add_block(x, GROUND_TOP + dy, z, m.dark_wood);
         }
         scene.add_block(x, GROUND_TOP + 3, z, m.lantern);
-        if (x + z).abs() % 2 == 0 {
-            add_lantern_light(&mut scene, x, GROUND_TOP + 4, z);
-        }
+        add_lantern_light(&mut scene, x, GROUND_TOP + 4, z);
     }
 
     build_small_stalls(&mut scene, &m);

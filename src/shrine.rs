@@ -97,8 +97,8 @@ pub fn build_shrine_world() -> World {
             build_stone_lantern(&mut scene, &m, x, HILL_TOP + 1, z);
         }
     }
-    // Additional lanterns along the pathways for depth and atmosphere
-    for (x, z) in [(-2, -10), (2, -10), (0, -25), (-6, -18), (6, -18), (-8, -10)] {
+    // Additional lanterns along the pathways (reduced from 6 to 3)
+    for (x, z) in [(0, -25), (-6, -18), (6, -18)] {
         build_stone_lantern(&mut scene, &m, x, HILL_TOP + 1, z);
     }
     build_edge_wall(&mut scene, &m);
@@ -679,12 +679,12 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     }
 
     // Stepping stones across the pond for a traditional garden aesthetic (now 8)
-    for (x, z) in [(8, -17), (14, -17), (20, -17), (16, -12), (16, -22), (10, -12), (22, -20), (12, -24)] {
+    for (x, z) in [(8, -17), (14, -17), (20, -17), (16, -12), (16, -22), (22, -20)] {
         scene.add_block(x, HILL_TOP, z, m.path_stone);
     }
 
-    // More rocks on the pond floor for depth and visual interest (increased from 5 to 8)
-    for (x, z) in [(8, -20), (24, -18), (12, -10), (20, -12), (6, -14), (26, -22), (9, -24), (18, -8)] {
+    // Rocks on the pond floor (optimized)
+    for (x, z) in [(8, -20), (24, -18), (12, -10), (20, -12), (6, -14)] {
         scene.fill((x, HILL_TOP - 4, z), (x, HILL_TOP - 2, z), m.rock);
     }
 
