@@ -275,7 +275,96 @@ fn draw_homepage(framebuffer: &mut Framebuffer) {
         }
     }
 
-    // Gentle fade overlay for welcome area
-    let welcome_color = Color::new(0.98, 0.95, 0.93);
-    framebuffer.fade_toward(welcome_color, 0.08);
+    let title_color = Color::new(0.7, 0.5, 0.85); // Deep purple
+    let text_color = Color::new(0.6, 0.4, 0.75);  // Medium purple
+    let accent_color = Color::new(1.0, 0.8, 0.85); // Light pink
+
+    // Title: "MIKAGE SHRINE"
+    draw_text(framebuffer, "MIKAGE SHRINE", 90, 40, 2, title_color);
+
+    // Main instructions
+    draw_text(framebuffer, "Welcome to Mikage Shrine", 85, 120, 1, text_color);
+    draw_text(framebuffer, "A raytraced voxel diorama", 75, 145, 1, text_color);
+
+    // Game info
+    draw_text(framebuffer, "FEATURES:", 60, 185, 1, title_color);
+    draw_text(framebuffer, "Two beautiful worlds to explore", 80, 205, 1, text_color);
+    draw_text(framebuffer, "Portal travel between shrine and spirit", 50, 220, 1, text_color);
+    draw_text(framebuffer, "Meet Tomoe and Nanami", 115, 235, 1, text_color);
+    draw_text(framebuffer, "Animated koi and sakura petals", 70, 250, 1, text_color);
+
+    // Controls
+    draw_text(framebuffer, "WASD move   Space/Shift up/down", 50, 285, 1, text_color);
+    draw_text(framebuffer, "Scroll zoom   Q/E rotate   Esc menu", 40, 300, 1, text_color);
+
+    // Main call-to-action
+    draw_text(framebuffer, "CLICK TO START", 105, 330, 2, accent_color);
+}
+
+/// Draw text using a simple bitmap font
+fn draw_text(framebuffer: &mut Framebuffer, text: &str, x: usize, y: usize, scale: usize, color: Color) {
+    let char_width = 6 * scale;
+    let mut current_x = x;
+
+    for ch in text.chars() {
+        if current_x + char_width > framebuffer.width {
+            break;
+        }
+        draw_char(framebuffer, ch, current_x, y, scale, color);
+        current_x += char_width + scale;
+    }
+}
+
+/// Draw a single character from bitmap font
+fn draw_char(framebuffer: &mut Framebuffer, ch: char, x: usize, y: usize, scale: usize, color: Color) {
+    let patterns: &[(char, &[u8; 5])] = &[
+        ('A', &[0b01110, 0b10001, 0b11111, 0b10001, 0b10001]),
+        ('C', &[0b01110, 0b10000, 0b10000, 0b10000, 0b01110]),
+        ('E', &[0b11111, 0b10000, 0b11110, 0b10000, 0b11111]),
+        ('F', &[0b11111, 0b10000, 0b11110, 0b10000, 0b10000]),
+        ('H', &[0b10001, 0b10001, 0b11111, 0b10001, 0b10001]),
+        ('I', &[0b11111, 0b00100, 0b00100, 0b00100, 0b11111]),
+        ('K', &[0b10001, 0b10010, 0b11100, 0b10010, 0b10001]),
+        ('M', &[0b10101, 0b11111, 0b10101, 0b10101, 0b10101]),
+        ('N', &[0b11001, 0b10101, 0b10011, 0b10001, 0b10001]),
+        ('O', &[0b01110, 0b10001, 0b10001, 0b10001, 0b01110]),
+        ('P', &[0b11110, 0b10001, 0b11110, 0b10000, 0b10000]),
+        ('R', &[0b11110, 0b10001, 0b11110, 0b10010, 0b10001]),
+        ('S', &[0b01111, 0b10000, 0b01110, 0b00001, 0b11110]),
+        ('T', &[0b11111, 0b00100, 0b00100, 0b00100, 0b00100]),
+        ('U', &[0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
+        ('W', &[0b10101, 0b10101, 0b10101, 0b11111, 0b10101]),
+        ('Y', &[0b10001, 0b01010, 0b00100, 0b00100, 0b00100]),
+        ('Z', &[0b11111, 0b00010, 0b00100, 0b01000, 0b11111]),
+        (' ', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000]),
+        (':', &[0b00000, 0b00100, 0b00000, 0b00100, 0b00000]),
+        ('/', &[0b00001, 0b00010, 0b00100, 0b01000, 0b10000]),
+    ];
+
+    let upper = ch.to_ascii_uppercase();
+    for (pat_ch, pattern) in patterns {
+        if *pat_ch == upper {
+            for row_idx in 0..5 {
+                let row_data = pattern[row_idx];
+                for col_idx in 0..5 {
+                    if (row_data >> (4 - col_idx)) & 1 == 1 {
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = x + col_idx * scale + sx;
+                                let py = y + row_idx * scale + sy;
+                                if px < framebuffer.width && py < framebuffer.height {
+                                    if let Some((_, row)) = framebuffer.rows_mut().nth(py) {
+                                        if px < row.len() {
+                                            row[px] = color;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return;
+        }
+    }
 }
