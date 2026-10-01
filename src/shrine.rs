@@ -140,16 +140,23 @@ pub fn build_shrine_world() -> World {
     World { scene, animation, portal_material: m.portal, arrival }
 }
 
-/// Five koi circling the pond (center 15, -16) on ovals of different sizes,
+/// Nine koi circling the pond (center 15, -16) on ovals of different sizes,
 /// at two depths, some clockwise and some counterclockwise. The water's
 /// surface is at height HILL_TOP; the floor at HILL_TOP - 3.
 fn add_swimming_koi(animation: &mut Animation) {
     let (shallow, deep) = (HILL_TOP as f32 - 0.6, HILL_TOP as f32 - 1.6);
+    // Outer ring: large, slower
     animation.add_koi((15.0, -15.5), (5.0, 3.0), shallow, 0.35, 0.0);
+    animation.add_koi((15.0, -15.5), (5.2, 3.2), deep, -0.28, 1.5);
+    // Middle ring: medium, moderate speed
     animation.add_koi((15.0, -15.5), (3.5, 2.2), deep, -0.45, 2.0);
-    animation.add_koi((13.0, -14.0), (2.5, 1.5), shallow, 0.6, 4.0);
-    animation.add_koi((17.0, -16.5), (3.0, 2.0), deep, -0.3, 1.0);
+    animation.add_koi((13.0, -14.0), (2.8, 1.8), shallow, 0.6, 4.0);
+    animation.add_koi((17.0, -16.5), (3.2, 2.1), deep, -0.38, 3.5);
+    // Inner ring: smaller, faster
     animation.add_koi((14.0, -15.0), (4.5, 2.5), deep, 0.25, 5.5);
+    animation.add_koi((16.0, -15.0), (2.0, 1.2), shallow, 0.55, 0.8);
+    animation.add_koi((15.0, -15.5), (1.5, 1.0), deep, -0.65, 3.0);
+    animation.add_koi((14.5, -16.5), (3.0, 2.0), shallow, 0.42, 2.5);
 }
 
 fn add_materials(scene: &mut Scene) -> Materials {
@@ -619,11 +626,16 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
         scene.fill((x, HILL_TOP - 4, z), (x, HILL_TOP - 2, z), m.rock);
     }
 
-    // More lily pads scattered across the pond
-    for (x, z) in [(7, -14), (10, -18), (23, -20), (15, -10), (18, -16), (11, -8)] {
+    // More lily pads scattered across the pond (increased from 6 to 10)
+    for (x, z) in [(7, -14), (10, -18), (23, -20), (15, -10), (18, -16), (11, -8), (9, -22), (25, -12), (13, -24), (19, -20)] {
         scene.add_block(x, HILL_TOP - 1, z, m.leaves);
     }
-    // (The koi are added by Animation - 5 of them swimming through this bigger space)
+
+    // Stepping stones across the pond for a traditional garden aesthetic
+    for (x, z) in [(8, -17), (14, -17), (20, -17), (16, -12), (16, -22)] {
+        scene.add_block(x, HILL_TOP, z, m.path_stone);
+    }
+    // (The koi are added by Animation - 9 of them swimming through this bigger space)
 
     // Bigger arched bridge (z = -19), now with wider approach
     for x in 3..=29 {
