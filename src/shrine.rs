@@ -23,9 +23,9 @@ use crate::vec3::Vec3;
 /// Top block of the town ground and of the hill.
 const GROUND_TOP: i32 = 3;
 const HILL_TOP: i32 = 18;
-/// Diorama footprint: x and z both go from -32 to 31 (64 × 64 blocks).
-const EDGE_MIN: i32 = -32;
-const EDGE_MAX: i32 = 31;
+/// Diorama footprint: x and z both go from -48 to 47 (96 × 96 blocks) - expanded for more space.
+const EDGE_MIN: i32 = -48;
+const EDGE_MAX: i32 = 47;
 /// Where the hillside starts (last row of the flat hilltop) and ends.
 const SLOPE_START: i32 = -8;
 const SLOPE_END: i32 = 7;
@@ -74,7 +74,7 @@ pub fn build_shrine_world() -> World {
         color: Color::new(1.05, 0.84, 0.62),
     };
     let ambient = Color::new(0.38, 0.33, 0.45); // soft lavender sky light
-    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [64, 44, 64], sun, ambient);
+    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [96, 44, 96], sun, ambient);
     let m = add_materials(&mut scene);
     // Golden-hour sky over the sea. Its painted sun matches `direction_to_sun`
     // above (examples/make_skybox.rs uses the same direction).
@@ -106,17 +106,29 @@ pub fn build_shrine_world() -> World {
 
     // Sakura: (x, z, trunk height, canopy radius)
     let mut animation = Animation::new(m.petal, m.koi, m.koi_white);
-    for (x, z, trunk, radius) in [(-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4), (-29, 16, 3, 3), (29, 18, 3, 3)] {
+    // MANY MORE sakura trees, varied sizes: small (radius 2-3), medium (4-5), large (5-7)
+    for (x, z, trunk, radius) in [
+        // Large statement trees
+        (-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4),
+        (-29, 16, 3, 3), (29, 18, 3, 3),
+        // Medium trees scattered
+        (-8, -25, 5, 4), (18, -20, 4, 3), (5, -12, 4, 3), (-35, -22, 5, 4), (35, -25, 4, 3),
+        (-10, 5, 3, 2), (15, 8, 4, 3), (32, -5, 3, 2), (-32, 10, 4, 3),
+        // Small accent trees
+        (0, -30, 3, 2), (10, -10, 3, 2), (-20, 15, 2, 2), (25, 20, 3, 2), (-38, 5, 3, 2),
+    ] {
         let ground = surface_top(&scene, x, z);
         build_sakura_tree(&mut scene, &m, x, z, ground, trunk, radius);
-        // Petals fall from the canopy (centered one block above the trunk top)
-        // down to the grass surface (the top of block `ground`).
         let canopy_center = Vec3::new(x as f32 + 0.5, (ground + trunk + 1) as f32 + 0.5, z as f32 + 0.5);
         animation.add_petal_tree(canopy_center, radius as f32, (ground + 1) as f32, (radius * 3) as usize);
     }
     add_swimming_koi(&mut animation);
-    // Pines, for deep green contrast next to all the pink.
-    for (x, z, height) in [(-29, -11, 9), (28, -31, 8), (26, 2, 7), (-28, 6, 6)] {
+    // MANY MORE pines for deep green contrast + evergreen variety
+    for (x, z, height) in [
+        (-29, -11, 9), (28, -31, 8), (26, 2, 7), (-28, 6, 6),
+        (-40, -28, 7), (40, -20, 8), (-35, 8, 6), (38, 10, 7),
+        (-12, -35, 6), (12, 25, 5), (30, 15, 6), (-30, -30, 7),
+    ] {
         let ground = surface_top(&scene, x, z);
         build_pine_tree(&mut scene, &m, x, z, ground, height);
     }
@@ -573,38 +585,40 @@ fn build_flower_bushes(scene: &mut Scene, m: &Materials) {
 /// Koi pond (an oval 3 blocks deep) with rocks, koi, lily pads, and an
 /// arched red bridge with railings across the middle.
 fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
-    let (center_x, center_z, radius_x, radius_z) = (15.0, -16.0, 7.5, 5.5);
-    for x in 7..=23 {
-        for z in -22..=-10 {
+    // MUCH BIGGER koi pond: expanded to 24×18 blocks
+    let (center_x, center_z, radius_x, radius_z) = (16.0, -15.0, 12.0, 9.0);
+    for x in 4..=28 {
+        for z in -24..=-6 {
             let dx = (x as f32 + 0.5 - center_x) / radius_x;
             let dz = (z as f32 + 0.5 - center_z) / radius_z;
             if dx * dx + dz * dz <= 1.0 {
-                scene.remove_block(x, HILL_TOP, z); // water surface sits 1 below the grass
-                scene.fill((x, HILL_TOP - 3, z), (x, HILL_TOP - 1, z), m.water);
-                scene.add_block(x, HILL_TOP - 4, z, m.sand);
+                scene.remove_block(x, HILL_TOP, z); // water surface
+                scene.fill((x, HILL_TOP - 4, z), (x, HILL_TOP - 1, z), m.water); // deeper pond
+                scene.add_block(x, HILL_TOP - 5, z, m.sand);
             }
         }
     }
-    // Rocks on the pond floor, tops just under (or poking out of) the surface.
-    scene.fill((11, HILL_TOP - 3, -20), (11, HILL_TOP - 1, -20), m.rock);
-    scene.fill((19, HILL_TOP - 3, -13), (20, HILL_TOP - 2, -13), m.rock);
-    scene.add_block(18, HILL_TOP - 3, -19, m.rock);
-    // Lily pads floating on the surface.
-    for (x, z) in [(9, -14), (21, -18), (13, -12)] {
+
+    // Rocks and stones on the pond floor for visual interest
+    for (x, z) in [(8, -20), (24, -18), (12, -10), (20, -12), (6, -14)] {
+        scene.fill((x, HILL_TOP - 4, z), (x, HILL_TOP - 2, z), m.rock);
+    }
+
+    // More lily pads scattered across the pond
+    for (x, z) in [(7, -14), (10, -18), (23, -20), (15, -10), (18, -16), (11, -8)] {
         scene.add_block(x, HILL_TOP - 1, z, m.leaves);
     }
-    // (The koi are added by `add_swimming_koi`: they move, so Animation owns them.)
+    // (The koi are added by Animation - 5 of them swimming through this bigger space)
 
-    // Arched bridge along X near the back of the pond (z = -19), so the koi in
-    // front stay visible: rises by one block twice toward the middle.
-    for x in 6..=24 {
-        let from_end = (x - 6).min(24 - x);
-        let deck = HILL_TOP + 1 + (from_end / 2).min(2);
-        scene.fill((x, deck, -20), (x, deck, -18), m.shrine_wood);
-        // Red railings along both outer edges, made of mini-blocks: a post
-        // every two blocks and a thin handrail on top.
+    // Bigger arched bridge (z = -19), now with wider approach
+    for x in 3..=29 {
+        let from_end = (x - 3).min(29 - x);
+        let deck = HILL_TOP + 1 + (from_end / 3).min(2); // gentler arch
+        scene.fill((x, deck, -21), (x, deck, -17), m.shrine_wood);
+
+        // Red railings on both outer edges
         let top = (deck + 1) * MINI;
-        for rail_z in [-20 * MINI, -18 * MINI + 3] {
+        for rail_z in [-21 * MINI, -17 * MINI + 3] {
             if x % 2 == 0 {
                 scene.fill_mini((x * MINI + 1, top, rail_z), (x * MINI + 2, top + 2, rail_z), m.lacquer);
             }
@@ -714,23 +728,30 @@ fn build_town(scene: &mut Scene, m: &Materials) {
         x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
     };
     for spec in [
-        // Left side: main street
+        // Left side: main street (more buildings, varied sizes)
         house(-14, 11, -6, 17, 2, m.plaster, m.house_roof, false, true),
         house(-26, 11, -17, 17, 1, m.shrine_wood, m.roof_tile, true, true),
         house(-13, 24, -6, 30, 2, m.plaster, m.roof_tile, false, false),
         house(-27, 24, -18, 30, 1, m.plaster, m.house_roof, true, false),
         house(-14, 11, -5, 16, 2, m.plaster, m.house_roof, false, true),
-        // Right side: main street
+        house(-30, 16, -22, 22, 2, m.plaster, m.house_roof, true, false),
+        // Right side: main street (more buildings)
         house(6, 11, 14, 17, 2, m.plaster, m.house_roof, false, true),
         house(17, 11, 27, 17, 1, m.shrine_wood, m.roof_tile, true, true),
         house(6, 24, 14, 30, 1, m.plaster, m.house_roof, true, false),
         house(17, 24, 26, 30, 2, m.shrine_wood, m.house_roof, false, false),
         house(7, 11, 15, 17, 2, m.plaster, m.roof_tile, false, true),
+        house(22, 16, 30, 22, 2, m.plaster, m.house_roof, true, true),
         // Back expansion: more shops and homes
         house(-28, 8, -20, 13, 1, m.plaster, m.house_roof, true, false),
         house(20, 8, 28, 13, 1, m.shrine_wood, m.roof_tile, true, true),
         house(-25, -2, -15, 3, 2, m.plaster, m.house_roof, false, true),
         house(15, -2, 25, 3, 1, m.plaster, m.roof_tile, true, false),
+        // Far corners: small buildings
+        house(-40, -15, -32, -8, 1, m.shrine_wood, m.roof_tile, true, false),
+        house(32, -15, 40, -8, 1, m.plaster, m.house_roof, true, true),
+        house(-38, 20, -30, 27, 2, m.plaster, m.roof_tile, false, false),
+        house(30, 20, 38, 27, 2, m.shrine_wood, m.house_roof, false, true),
     ] {
         build_house(scene, m, &spec);
     }

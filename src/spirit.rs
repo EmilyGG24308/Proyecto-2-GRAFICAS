@@ -1,16 +1,16 @@
-//! Scene 2: the spirit world, a yokai pleasure district at night.
+//! Scene 2: the spirit world, a grand yokai pleasure district at night.
 //!
-//! Layout (X = left/right, Z = back(-)/front(+), Y = up), 48 × 48 blocks:
-//!   front  (z 11..23): a small plaza where you arrive through the portal
-//!                      torii; a glass spirit orb with fox-fire inside
-//!   middle (z -17..9): a canal down the center with two red bridges,
-//!                      streets on both banks, rows of multi-story wooden
-//!                      bathhouses and teahouses with glowing paper windows,
-//!                      balconies and red lanterns; lantern strings overhead
-//!   back   (z -23..-19): the great bathhouse, six floors tall
+//! Layout (X = left/right, Z = back(-)/front(+), Y = up), 96 × 96 blocks:
+//!   front  (z 30..47): a large plaza where you arrive; torii; spirit orb
+//!   middle (z -30..25): a grand canal with red bridges, narrow wooden streets,
+//!                       rows of 3-4 story teahouses, bathhouses, shops with
+//!                       red doors, glowing paper windows, red lanterns everywhere,
+//!                       lantern strings overhead (Demon Slayer Yoshiwara vibe)
+//!   back   (z -40..-30): the great bathhouse, six floors tall
 //!
-//! The mood is the opposite of the shrine: night, deep indigo and purple,
-//! lit almost only by warm lanterns and the cool moon.
+//! The mood: night, deep indigo and purple, lit by warm RED lanterns on every
+//! corner. Narrow alleys, wooden architecture, red accents. Atmospheric and
+//! otherworldly.
 
 use crate::animation::Animation;
 use crate::color::Color;
@@ -22,11 +22,11 @@ use crate::vec3::Vec3;
 use crate::world::World;
 
 const GROUND_TOP: i32 = 4;
-const EDGE_MIN: i32 = -24;
-const EDGE_MAX: i32 = 23;
+const EDGE_MIN: i32 = -48;
+const EDGE_MAX: i32 = 47;
 /// The canal runs along Z between these depths, 5 blocks wide (x -2..2).
-const CANAL_BACK: i32 = -17;
-const CANAL_FRONT: i32 = 9;
+const CANAL_BACK: i32 = -35;
+const CANAL_FRONT: i32 = 20;
 
 struct Materials {
     stone: usize,
@@ -60,30 +60,46 @@ pub fn build_spirit_world() -> World {
         color: Color::new(0.5, 0.5, 0.78),
     };
     let ambient = Color::new(0.2, 0.15, 0.32); // deep indigo night, but readable
-    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [48, 40, 48], moon, ambient);
+    let mut scene = Scene::new([EDGE_MIN, 0, EDGE_MIN], [96, 40, 96], moon, ambient);
     let m = add_materials(&mut scene);
     scene.load_skybox("night");
 
     scene.fill((EDGE_MIN, 0, EDGE_MIN), (EDGE_MAX, GROUND_TOP, EDGE_MAX), m.stone);
     build_canal_and_bridges(&mut scene, &m);
 
-    // Two rows of buildings facing the canal: (z0, z1, floors).
-    for (z0, z1, floors) in [(-15, -9, 3), (-6, 0, 4), (3, 9, 3)] {
-        build_teahouse(&mut scene, &m, (-20, z0, -10, z1), floors, Front::PlusX);
+    // Expanded: many more buildings, 3-4 rows on each side for that dense red-light district feel
+    // Left side (+X direction)
+    for (z0, z1, floors) in [(-32, -26, 3), (-24, -18, 4), (-16, -10, 3), (-8, -2, 4), (0, 6, 3), (8, 14, 4), (16, 22, 3)] {
+        build_teahouse(&mut scene, &m, (-26, z0, -16, z1), floors, Front::PlusX);
     }
-    for (z0, z1, floors) in [(-15, -9, 4), (-6, 0, 3), (3, 9, 4)] {
-        build_teahouse(&mut scene, &m, (10, z0, 20, z1), floors, Front::MinusX);
+    // Right side (-X direction)
+    for (z0, z1, floors) in [(-32, -26, 4), (-24, -18, 3), (-16, -10, 4), (-8, -2, 3), (0, 6, 4), (8, 14, 3), (16, 22, 4)] {
+        build_teahouse(&mut scene, &m, (16, z0, 26, z1), floors, Front::MinusX);
     }
     // The great bathhouse closing off the far end of the street.
-    build_teahouse(&mut scene, &m, (-11, -23, 11, -19), 6, Front::PlusZ);
+    build_teahouse(&mut scene, &m, (-13, -40, 13, -32), 6, Front::PlusZ);
 
-    // Strings of lanterns hung across the street, high above the canal.
-    for z in [-11, -4, 5] {
-        for x in (-8..=8).step_by(2) {
+    // Additional small shops/buildings in narrow alleys
+    for (z0, z1) in [(-28, -24), (-12, -8), (4, 8)] {
+        build_teahouse(&mut scene, &m, (-12, z0, -6, z1), 2, Front::PlusX);
+        build_teahouse(&mut scene, &m, (6, z0, 12, z1), 2, Front::MinusX);
+    }
+
+    // Many lantern strings across the street: every 6-7 blocks for atmosphere
+    for z in (-30..=20).step_by(7) {
+        for x in (-20..=20).step_by(2) {
             scene.add_block(x, GROUND_TOP + 12, z, m.lantern);
         }
-        for x in [-6, 6] {
+        for x in [-18, -10, -2, 6, 14] {
             add_lantern_light(&mut scene, x, GROUND_TOP + 12, z);
+        }
+    }
+
+    // Red lanterns on building corners for more ambient light
+    for z in (-35..=18).step_by(8) {
+        for x in [-24, -18, 18, 24] {
+            scene.add_block(x, GROUND_TOP + 3, z, m.lantern);
+            add_lantern_light(&mut scene, x, GROUND_TOP + 4, z);
         }
     }
 
