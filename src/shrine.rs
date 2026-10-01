@@ -101,7 +101,6 @@ pub fn build_shrine_world() -> World {
     build_pond_and_bridge(&mut scene, &m);
     build_cave_hill(&mut scene, &m);
     build_guide_lights(&mut scene, &m);
-    build_shrine_decorations(&mut scene, &m);
     build_town(&mut scene, &m);
     build_stair_banners(&mut scene, &m);
 
@@ -614,55 +613,19 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     }
 }
 
-/// Tall lantern posts along the path from shrine to cave: obvious, visible, and atmospheric.
-/// Each post is 4 blocks tall with a glowing red lantern and light source on top.
+/// Subtle guide lights marking the path to the cave - just 2 lanterns, not overdone.
 fn build_guide_lights(scene: &mut Scene, m: &Materials) {
-    let positions = [
-        (-3, HILL_TOP + 1, -8),    // shrine approach
-        (-8, HILL_TOP + 1, -9),
-        (-14, HILL_TOP + 1, -10),
-        (-20, HILL_TOP + 1, -11),
-        (-23, HILL_TOP + 1, -12),  // cave entrance
-    ];
+    // Only mark the cave entrance itself, don't clutter the path
+    let cave_entrance_x = -23;
+    let cave_entrance_z = -13;
+    let y = HILL_TOP + 1;
 
-    for (x, y, z) in positions {
-        // Tall wooden post: 4 blocks high
-        for dy in 0..4 {
-            scene.add_block(x, y + dy, z, m.shrine_wood);
-        }
-        // Red lantern on top
-        let (bx, by, bz) = (x * MINI, (y + 4) * MINI, z * MINI);
-        scene.fill_mini((bx, by, bz), (bx + 3, by + 2, bz + 3), m.red_lantern);
-        // Bright warm light above the lantern to guide the way
-        scene.point_lights.push(PointLight {
-            position: Vec3::new(x as f32 + 0.5, (y + 6) as f32, z as f32 + 0.5),
-            color: Color::new(1.2, 0.9, 0.6),
-            radius: 10.0,
-        });
-    }
+    // Stone lantern right at the cave entrance
+    build_stone_lantern(scene, m, cave_entrance_x, y, cave_entrance_z);
 }
 
 /// More lanterns and flowers around the shrine area to make it feel grander
 /// and more detailed: lanterns lighting the pathways and flower beds.
-fn build_shrine_decorations(scene: &mut Scene, m: &Materials) {
-    // Additional lanterns around the main shrine paths for more ambiance
-    for (x, z) in [(-10, -18), (10, -18), (-12, -12), (12, -12), (-6, -8), (6, -8)] {
-        build_stone_lantern(scene, m, x, HILL_TOP + 1, z);
-    }
-
-    // More flowering bushes scattered around: hydrangea and azalea clusters
-    let flower_positions = [
-        (8, -20), (-8, -20), (15, -25), (-15, -25), (5, -15), (-5, -15),
-        (11, -12), (-11, -12), (18, -22), (-18, -22),
-    ];
-
-    for (x, z) in flower_positions {
-        // 60% hydrangea, 40% azalea for variety
-        let flower_type = if noise(x, 11, z) % 10 < 6 { m.hydrangea } else { m.azalea };
-        build_bush(scene, m, x, z, flower_type);
-    }
-}
-
 /// A mossy rock hill in the back-left corner. A straight tunnel runs into it
 /// from the front, and the portal glows at its far end, so you can see the
 /// light from the shrine grounds. A red torii and lanterns mark the way.
@@ -822,40 +785,49 @@ fn build_house(scene: &mut Scene, m: &Materials, h: &House) {
 
 fn build_sakura_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i32, trunk_height: i32, radius: i32) {
     // Fallen petals on the grass around the tree (before the trunk goes in).
-    for dx in -radius - 2..=radius + 2 {
-        for dz in -radius - 2..=radius + 2 {
+    for dx in -radius - 1..=radius + 1 {
+        for dz in -radius - 1..=radius + 1 {
             let (px, pz) = (x + dx, z + dz);
-            if dx * dx + dz * dz > (radius + 2) * (radius + 2) || !scene.blocks.contains([px, 0, pz]) {
+            if dx * dx + dz * dz > (radius + 1) * (radius + 1) || !scene.blocks.contains([px, 0, pz]) {
                 continue;
             }
             let top = surface_top(scene, px, pz);
-            if scene.blocks.get([px, top, pz]) == Some(m.grass as u8) && noise(px, top, pz) < 55 {
+            if scene.blocks.get([px, top, pz]) == Some(m.grass as u8) && noise(px, top, pz) < 40 {
                 scene.add_block(px, top, pz, m.petal_grass);
             }
         }
     }
 
     let trunk_top = ground + trunk_height;
-    scene.fill((x, ground + 1, z), (x, trunk_top, z), m.dark_wood);
-    // A few branches leaning out from the upper trunk.
-    for (bx, bz) in [(1, 0), (-1, 1), (0, -1)] {
-        scene.add_block(x + bx, trunk_top - 1, z + bz, m.dark_wood);
-        scene.add_block(x + 2 * bx, trunk_top, z + 2 * bz, m.dark_wood);
+    // Trunk: wider at base, tapers toward top
+    scene.add_block(x, ground + 1, z, m.dark_wood);
+    scene.fill((x, ground + 2, z), (x, trunk_top - 2, z), m.dark_wood);
+
+    // Major branches spreading out from the upper trunk: 4 directions, getting shorter
+    for (bx, bz, height_down) in [(1, 0, 2), (-1, 0, 2), (0, 1, 2), (0, -1, 2)] {
+        let branch_height = trunk_top - height_down;
+        scene.add_block(x + bx, branch_height, z + bz, m.dark_wood);
+        scene.add_block(x + 2 * bx, branch_height + 1, z + 2 * bz, m.dark_wood);
     }
 
-    // Canopy: a squashed ball of blossoms, with random gaps and two pinks.
+    // Canopy: dense at center, sparse at edges. Slightly asymmetric for natural look.
     let r = radius as f32;
     for dx in -radius..=radius {
-        for dy in -radius..=radius {
+        for dy in 0..=radius {
             for dz in -radius..=radius {
-                let squashed_dy = dy as f32 * 1.4; // wider than tall
-                let distance = ((dx * dx + dz * dz) as f32 + squashed_dy * squashed_dy).sqrt();
-                let (bx, by, bz) = (x + dx, trunk_top + 1 + dy, z + dz);
+                let distance = ((dx * dx + dz * dz) as f32 + (dy as f32 * 0.8) * (dy as f32 * 0.8)).sqrt();
+                let (bx, by, bz) = (x + dx, trunk_top + dy, z + dz);
                 let roll = noise(bx, by, bz);
-                // Near the edge, leave random gaps so the outline looks fluffy.
-                if distance > r || (distance > r - 1.2 && roll < 35) {
+
+                // Denser core, sparser edges
+                if distance > r {
                     continue;
                 }
+                if distance > r - 0.8 && roll < 45 {
+                    continue; // Random gaps at edges
+                }
+
+                // Two-tone pinks for visual depth
                 let pink = if roll % 3 == 0 { m.sakura_dark } else { m.sakura_light };
                 scene.add_block_if_empty(bx, by, bz, pink);
             }
