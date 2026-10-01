@@ -252,17 +252,13 @@ fn draw_homepage(framebuffer: &mut Framebuffer) {
 
     print_centered(framebuffer, "BIENVENIDO", 95, 1, text);
     print_centered(framebuffer, "EXPLORA DOS MUNDOS", 120, 1, title);
-    print_centered(framebuffer, "Dimensión Santuario y Espíritu", 140, 1, text);
 
-    print_centered(framebuffer, "CONOCE A TOMOE Y NANAMI", 175, 1, title);
-    print_centered(framebuffer, "Carpas y Pétalos Sakura Animados", 195, 1, text);
+    print_centered(framebuffer, "CONTROLES", 160, 1, title);
+    print_centered(framebuffer, "WASD mover  Espacio/Mayús arriba/abajo", 185, 1, text);
+    print_centered(framebuffer, "Rueda zoom  Q/E girar  Esc menú", 200, 1, text);
 
-    print_centered(framebuffer, "CONTROLES", 230, 1, title);
-    print_centered(framebuffer, "WASD mover  Espacio/Mayús arriba/abajo", 250, 1, text);
-    print_centered(framebuffer, "Rueda zoom  Q/E girar  Esc menú", 265, 1, text);
-
-    line_h(framebuffer, 50, 290, w - 50, accent);
-    print_centered(framebuffer, "HAZ CLIC PARA EXPLORAR", 315, 2, accent);
+    line_h(framebuffer, 50, 225, w - 50, accent);
+    print_centered(framebuffer, "HAZ CLIC PARA EXPLORAR", 250, 2, accent);
 }
 
 fn print_centered(fb: &mut Framebuffer, text: &str, y: usize, scale: usize, color: Color) {
