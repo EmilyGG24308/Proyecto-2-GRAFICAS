@@ -110,28 +110,27 @@ pub fn build_shrine_world() -> World {
 
     // Sakura: (x, z, trunk height, canopy radius)
     let mut animation = Animation::new(m.petal, m.koi, m.koi_white);
-    // MANY MORE sakura trees, varied sizes: small (radius 2-3), medium (4-5), large (5-7)
+    // Sakura trees - optimized count (reduced from 25 to 12)
     for (x, z, trunk, radius) in [
-        // Large statement trees
-        (-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4),
-        (-29, 16, 3, 3), (29, 18, 3, 3),
-        // Medium trees scattered
-        (-8, -25, 5, 4), (18, -20, 4, 3), (5, -12, 4, 3), (-35, -22, 5, 4), (35, -25, 4, 3),
-        (-10, 5, 3, 2), (15, 8, 4, 3), (32, -5, 3, 2), (-32, 10, 4, 3),
-        // Small accent trees
-        (0, -30, 3, 2), (10, -10, 3, 2), (-20, 15, 2, 2), (25, 20, 3, 2), (-38, 5, 3, 2),
+        // Large statement trees (reduced)
+        (-15, -17, 6, 4), (24, -29, 5, 3), (27, -10, 5, 3),
+        // Medium trees (reduced)
+        (18, -20, 4, 3), (-10, 5, 3, 2), (15, 8, 4, 3),
+        // Small accent trees (reduced)
+        (0, -30, 3, 2), (10, -10, 3, 2), (-20, 15, 2, 2), (25, 20, 3, 2),
+        // Two more for balance
+        (-30, -25, 4, 3), (30, -20, 4, 3),
     ] {
         let ground = surface_top(&scene, x, z);
         build_sakura_tree(&mut scene, &m, x, z, ground, trunk, radius);
         let canopy_center = Vec3::new(x as f32 + 0.5, (ground + trunk + 1) as f32 + 0.5, z as f32 + 0.5);
-        animation.add_petal_tree(canopy_center, radius as f32, (ground + 1) as f32, (radius * 3) as usize);
+        animation.add_petal_tree(canopy_center, radius as f32, (ground + 1) as f32, (radius * 2) as usize);
     }
     add_swimming_koi(&mut animation);
-    // MANY MORE pines for deep green contrast + evergreen variety
+    // Pine trees - optimized (reduced from 12 to 6)
     for (x, z, height) in [
-        (-29, -11, 9), (28, -31, 8), (26, 2, 7), (-28, 6, 6),
-        (-40, -28, 7), (40, -20, 8), (-35, 8, 6), (38, 10, 7),
-        (-12, -35, 6), (12, 25, 5), (30, 15, 6), (-30, -30, 7),
+        (-29, -11, 7), (28, -31, 7), (26, 2, 6),
+        (-35, 8, 6), (-12, -35, 6), (30, 15, 6),
     ] {
         let ground = surface_top(&scene, x, z);
         build_pine_tree(&mut scene, &m, x, z, ground, height);
@@ -816,30 +815,22 @@ fn build_town(scene: &mut Scene, m: &Materials) {
         x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
     };
     for spec in [
-        // Left side: main street with varied building sizes
+        // Left side: main street (optimized)
         house(-14, 11, -6, 17, 2, m.plaster, m.house_roof, false, true),
         house(-26, 11, -17, 17, 1, m.shrine_wood, m.roof_tile, true, true),
-        house(-13, 24, -6, 30, 3, m.plaster, m.roof_tile, false, false),  // Taller building
-        house(-27, 24, -18, 30, 1, m.plaster, m.house_roof, true, false),
-        house(-14, 11, -5, 16, 2, m.plaster, m.house_roof, false, true),
+        house(-13, 24, -6, 30, 2, m.plaster, m.roof_tile, false, false),
         house(-30, 16, -22, 22, 2, m.plaster, m.house_roof, true, false),
-        // Right side: main street (more buildings)
+        // Right side: main street (optimized)
         house(6, 11, 14, 17, 2, m.plaster, m.house_roof, false, true),
-        house(17, 11, 27, 17, 2, m.shrine_wood, m.roof_tile, true, true),  // Taller
-        house(6, 24, 14, 30, 1, m.plaster, m.house_roof, true, false),
+        house(17, 11, 27, 17, 2, m.shrine_wood, m.roof_tile, true, true),
         house(17, 24, 26, 30, 2, m.shrine_wood, m.house_roof, false, false),
-        house(7, 11, 15, 17, 2, m.plaster, m.roof_tile, false, true),
-        house(22, 16, 30, 22, 3, m.plaster, m.house_roof, true, true),  // Taller
-        // Back expansion: more shops and homes
-        house(-28, 8, -20, 13, 1, m.plaster, m.house_roof, true, false),
-        house(20, 8, 28, 13, 1, m.shrine_wood, m.roof_tile, true, true),
+        house(22, 16, 30, 22, 2, m.plaster, m.house_roof, true, true),
+        // Back expansion (reduced)
         house(-25, -2, -15, 3, 2, m.plaster, m.house_roof, false, true),
         house(15, -2, 25, 3, 1, m.plaster, m.roof_tile, true, false),
-        // Far corners: varied heights for visual interest
-        house(-40, -15, -32, -8, 2, m.shrine_wood, m.roof_tile, true, false),  // Taller
+        // Far corners (reduced)
+        house(-40, -15, -32, -8, 1, m.shrine_wood, m.roof_tile, true, false),
         house(32, -15, 40, -8, 1, m.plaster, m.house_roof, true, true),
-        house(-38, 20, -30, 27, 2, m.plaster, m.roof_tile, false, false),
-        house(30, 20, 38, 27, 2, m.shrine_wood, m.house_roof, false, true),
     ] {
         build_house(scene, m, &spec);
     }
