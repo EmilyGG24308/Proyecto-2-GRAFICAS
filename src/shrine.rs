@@ -756,6 +756,9 @@ fn build_town(scene: &mut Scene, m: &Materials) {
     scene.fill((-3, GROUND_TOP, SLOPE_END + 1), (3, GROUND_TOP, EDGE_MAX), m.road);
     scene.fill((EDGE_MIN, GROUND_TOP, 20), (EDGE_MAX, GROUND_TOP, 22), m.road);
 
+    // Small shrines and trading posts for town atmosphere
+    build_town_shrines_and_markets(scene, m);
+
     let house = |x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front| House {
         x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
     };
@@ -832,6 +835,37 @@ fn build_house(scene: &mut Scene, m: &Materials, h: &House) {
     scene.fill((door_x, bottom, front_z), (door_x, bottom + 1, front_z), m.dark_wood);
 
     build_gable_roof(scene, h.roof, h.x0, h.x1, h.z0, h.z1, top + 1);
+}
+
+/// Small decorative shrines and market stalls scattered through town
+fn build_town_shrines_and_markets(scene: &mut Scene, m: &Materials) {
+    // Small roadside shrines: 2×2 base with a tiny roof
+    for (x, z) in [(-20, 6), (22, 6), (-18, -8), (20, -8)] {
+        let y = GROUND_TOP + 1;
+        // Small base
+        scene.fill((x, y, z), (x + 1, y, z + 1), m.path_stone);
+        // Shrine structure
+        scene.add_block(x, y + 1, z, m.shrine_wood);
+        scene.add_block(x, y + 2, z, m.roof_tile);
+        scene.add_block(x, y + 1, z + 1, m.dark_wood);
+        // Tiny roof
+        scene.add_block(x - 1, y + 2, z, m.roof_tile);
+        scene.add_block(x + 2, y + 2, z, m.roof_tile);
+    }
+
+    // Market stalls: counters with red/white striped awnings (using mini-blocks)
+    for (x, z) in [(-12, 0), (12, 0), (-24, 10), (24, 10)] {
+        let (bx, by, bz) = (x * MINI, GROUND_TOP * MINI, z * MINI);
+        // Counter top
+        scene.fill_mini((bx, by, bz), (bx + 3, by + 1, bz + 3), m.shrine_wood);
+        // Awning posts
+        scene.fill_mini((bx - 1, by + 2, bz - 1), (bx - 1, by + 3, bz - 1), m.dark_wood);
+        scene.fill_mini((bx + 4, by + 2, bz - 1), (bx + 4, by + 3, bz - 1), m.dark_wood);
+        // Awning fabric (alternating)
+        for by_offset in 0..2 {
+            scene.fill_mini((bx - 1, by + 4 + by_offset, bz - 1), (bx + 4, by + 4 + by_offset, bz + 4), m.awning);
+        }
+    }
 }
 
 // ============================ Trees ============================
