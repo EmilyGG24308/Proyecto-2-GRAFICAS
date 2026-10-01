@@ -2,6 +2,7 @@ use crate::camera::Camera;
 use crate::color::Color;
 use crate::cube::Hit;
 use crate::framebuffer::Framebuffer;
+use crate::material::Material;
 use crate::ray::Ray;
 use crate::scene::Scene;
 use crate::vec3::Vec3;
@@ -212,35 +213,65 @@ fn shade_surface(scene: &Scene, hit: &Hit, view_direction: Vec3) -> Color {
     } else {
         material.texture_side
     };
-    // See-through liquids: slide the texture slowly, so the water seems to flow.
-    let texture_point = if material.transparency > 0.0 {
-        hit.point + Vec3::new(scene.time * 0.15, 0.0, scene.time * 0.08)
-    } else {
-        hit.point
-    };
+    // Sliding textures (flowing water, the swirling portal): sample the texture
+    // as if the surface point had moved by speed × time.
+    let texture_point = hit.point + material.texture_scroll * scene.time;
     let (u, v) = face_uv(texture_point, normal);
     let surface_color = scene.textures[texture_number].sample(u, v) * material.albedo;
 
     // Ambient: a little light everywhere, so shadows are not pitch black.
     // Glow: light the surface makes itself, so it shows even in shadow.
-    let ambient = surface_color * scene.ambient + surface_color * material.glow;
+    let mut color = surface_color * scene.ambient + surface_color * material.glow;
 
-    // How directly the face points at the sun: 1 = straight at it, 0 or less = away.
+    // The sun (or moon): one light infinitely far away.
     let facing_sun = normal.dot(to_sun);
-    if facing_sun <= 0.0 || is_in_shadow(scene, hit, to_sun) {
-        return ambient;
+    if facing_sun > 0.0 && !is_in_shadow(scene, hit, to_sun) {
+        color = color + phong(surface_color, material, scene.sun.color, facing_sun, to_sun, normal, view_direction);
     }
 
-    // Diffuse: matte light, brightest when the face points at the sun.
-    let diffuse = surface_color * scene.sun.color * facing_sun;
+    // Point lights (lanterns, the portal): same Phong formula, but each one
+    // fades with distance, and only lights things within its radius.
+    for light in &scene.point_lights {
+        let to_light = light.position - hit.point;
+        let distance = to_light.length();
+        if distance >= light.radius {
+            continue; // too far: skip it cheaply, before any shadow ray
+        }
+        let direction = to_light * (1.0 / distance);
+        let facing = normal.dot(direction);
+        if facing <= 0.0 {
+            continue;
+        }
+        // Shadow ray with a DISTANCE LIMIT: only blockers between the surface
+        // and the light count. Anything beyond the light can't shadow it.
+        let shadow_ray = Ray::new(hit.point + normal * SURFACE_OFFSET, direction);
+        if scene.is_blocked(&shadow_ray, 0.0, distance) {
+            continue;
+        }
+        // Smooth falloff: full strength at the light, exactly 0 at its radius.
+        let falloff = (1.0 - distance / light.radius).powi(2);
+        let light_color = light.color * falloff;
+        color = color + phong(surface_color, material, light_color, facing, direction, normal, view_direction);
+    }
+    color
+}
 
-    // Specular: the shiny highlight. Mirror the incoming sunlight around the
+/// Diffuse + specular from one light. `facing` = normal · to_light (> 0).
+fn phong(surface_color: Color, material: &Material, light_color: Color, facing: f32, to_light: Vec3, normal: Vec3, view_direction: Vec3) -> Color {
+    // Diffuse: matte light, brightest when the face points at the light.
+    let diffuse = surface_color * light_color * facing;
+    // Specular: the shiny highlight. Mirror the incoming light around the
     // normal; the closer that mirrored ray points at the eye, the brighter.
-    let reflected_sunlight = (-to_sun).reflect(normal);
-    let toward_eye = reflected_sunlight.dot(view_direction).max(0.0);
-    let specular = scene.sun.color * (material.specular_strength * toward_eye.powf(material.shininess));
+    let reflected_light = (-to_light).reflect(normal);
+    let toward_eye = reflected_light.dot(view_direction).max(0.0);
+    let specular = light_color * (material.specular_strength * toward_eye.powf(material.shininess));
+    diffuse + specular
+}
 
-    ambient + diffuse + specular
+/// The block the camera sees through pixel (x, y), for clicking on things.
+pub fn pick(camera: &Camera, scene: &Scene, x: usize, y: usize, width: usize, height: usize) -> Option<Hit> {
+    let ray = scene.to_diorama_ray(&camera.ray_for_pixel(x, y, width, height));
+    scene.closest_hit(&ray, 0.0, f32::INFINITY)
 }
 
 /// Shadow ray: from the hit point toward the sun. If anything is in the way,
@@ -252,7 +283,7 @@ fn shade_surface(scene: &Scene, hit: &Hit, view_direction: Vec3) -> Color {
 fn is_in_shadow(scene: &Scene, hit: &Hit, to_sun: Vec3) -> bool {
     let shadow_ray = Ray::new(hit.point + hit.normal * SURFACE_OFFSET, to_sun);
     // The sun is infinitely far away, so a blocker at ANY distance counts.
-    // (For a lamp at distance d, we would use t_max = d instead.)
+    // (Point lights, below, use t_max = their distance instead.)
     scene.is_blocked(&shadow_ray, 0.0, f32::INFINITY)
 }
 

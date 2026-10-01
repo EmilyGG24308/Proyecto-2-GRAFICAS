@@ -10,7 +10,9 @@
 //! INSIDE the cube looking at that face, with "up" = +Y on the four side
 //! faces. So a painter can open a face image and it looks the right way up.
 
-pub const FACE_NAMES: [&str; 6] = ["sky_px", "sky_nx", "sky_py", "sky_ny", "sky_pz", "sky_nz"];
+/// File name endings of the six faces: a skybox called "sky" is stored as
+/// sky_px.bmp, sky_nx.bmp, ... and one called "night" as night_px.bmp, ...
+pub const FACE_SUFFIXES: [&str; 6] = ["px", "nx", "py", "ny", "pz", "nz"];
 
 /// Which face a direction points at, and the (u, v) on it, each 0..1.
 ///

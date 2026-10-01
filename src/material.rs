@@ -1,3 +1,5 @@
+use crate::vec3::Vec3;
+
 /// How a surface looks and reacts to light.
 #[derive(Clone, Copy, Debug)]
 pub struct Material {
@@ -25,6 +27,9 @@ pub struct Material {
     /// color (0 = none). Lit lanterns glow; petals get a little, standing in
     /// for sunlight shining through thin petals.
     pub glow: f32,
+    /// How fast the texture slides across the surface, in blocks per second
+    /// along X, Y and Z (zero = still). Flowing water and the swirling portal.
+    pub texture_scroll: Vec3,
 }
 
 impl Material {
@@ -42,6 +47,7 @@ impl Material {
             reflectivity: 0.0,
             refractive_index: 1.0,
             glow: 0.0,
+            texture_scroll: Vec3::new(0.0, 0.0, 0.0),
         }
     }
 }

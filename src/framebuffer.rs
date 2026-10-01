@@ -22,6 +22,27 @@ impl Framebuffer {
         }
     }
 
+    /// Blends every pixel toward `color`: amount 0 = unchanged, 1 = all `color`.
+    /// Used for the fade when traveling through the portal.
+    pub fn fade_toward(&mut self, color: Color, amount: f32) {
+        for pixel in &mut self.pixels {
+            *pixel = pixel.lerp(color, amount);
+        }
+    }
+
+    /// A small "+" in the middle of the image, so you can see what you'd click.
+    /// Each pixel is inverted, so it shows up on both light and dark scenery.
+    pub fn draw_crosshair(&mut self) {
+        let (center_x, center_y) = (self.width / 2, self.height / 2);
+        for offset in -3i32..=3 {
+            for (x, y) in [(center_x as i32 + offset, center_y as i32), (center_x as i32, center_y as i32 + offset)] {
+                let index = y as usize * self.width + x as usize;
+                let c = self.pixels[index];
+                self.pixels[index] = Color::new(1.0 - c.r.min(1.0), 1.0 - c.g.min(1.0), 1.0 - c.b.min(1.0));
+            }
+        }
+    }
+
     /// Splits the image into rows: (row number y, that row's pixels).
     /// Each row is a separate mutable slice, so different threads can fill
     /// different rows at the same time without touching each other's memory.

@@ -14,7 +14,9 @@
 use crate::animation::Animation;
 use crate::color::Color;
 use crate::material::Material;
-use crate::scene::{Scene, Sun};
+use crate::controls::Controls;
+use crate::scene::{PointLight, Scene, Sun};
+use crate::world::World;
 use crate::vec3::Vec3;
 
 /// Top block of the town ground and of the hill.
@@ -50,13 +52,15 @@ struct Materials {
     road: usize,
     paper: usize,
     koi: usize,
+    portal: usize,
+    foxfire: usize,
     window: usize,
     awning: usize,
     concrete: usize,
 }
 
 /// Builds the scene, plus the Animation that moves its petals and koi.
-pub fn build_shrine_scene() -> (Scene, Animation) {
+pub fn build_shrine_world() -> World {
     let sun = Sun {
         direction_to_sun: Vec3::new(0.35, 1.0, 0.8).normalized(),
         color: Color::new(1.0, 0.95, 0.85), // warm afternoon sunlight
@@ -66,7 +70,7 @@ pub fn build_shrine_scene() -> (Scene, Animation) {
     let m = add_materials(&mut scene);
     // Pastel afternoon sky. Its painted sun matches `direction_to_sun` above
     // (examples/make_skybox.rs uses the same direction).
-    scene.load_skybox();
+    scene.load_skybox("sky");
 
     // Ground first, then things standing on it, then trees last: trees only
     // fill empty space, so they never cut into buildings.
@@ -106,7 +110,7 @@ pub fn build_shrine_scene() -> (Scene, Animation) {
         let ground = surface_top(&scene, x, z);
         build_pine_tree(&mut scene, &m, x, z, ground, height);
     }
-    (scene, animation)
+    World { scene, animation, portal_material: m.portal, arrival }
 }
 
 /// Four koi circling the pond (center 15, -16) on ovals of different sizes,
@@ -157,6 +161,7 @@ fn add_materials(scene: &mut Scene) -> Materials {
         transparency: 0.80,
         reflectivity: 0.25,
         refractive_index: 1.33,
+        texture_scroll: Vec3::new(0.15, 0.0, 0.08), // slowly flowing
         ..Material::opaque(water_texture, 0.35, 0.9, 96.0)
     });
 
@@ -182,6 +187,16 @@ fn add_materials(scene: &mut Scene) -> Materials {
         texture_bottom: rock_texture,
         ..Material::opaque(moss_side, 0.85, 0.02, 4.0)
     });
+    // The portal: bright glowing violet whose swirls drift upward, and the
+    // blue fox-fire crystals that light the way to it.
+    let portal_texture = scene.load_texture("portal");
+    let portal = scene.add_material(Material {
+        glow: 1.4,
+        texture_scroll: Vec3::new(0.0, 0.5, 0.0),
+        ..Material::opaque(portal_texture, 0.9, 0.3, 32.0)
+    });
+    let foxfire_texture = scene.load_texture("foxfire");
+    let foxfire = scene.add_material(Material { glow: 1.2, ..Material::opaque(foxfire_texture, 0.9, 0.2, 16.0) });
     // Window glass: opaque (the houses are solid), but it mirrors the sky.
     let window_texture = scene.load_texture("window");
     let window = scene.add_material(Material {
@@ -216,6 +231,8 @@ fn add_materials(scene: &mut Scene) -> Materials {
         paper,
         petal,
         koi: textured("koi", 0.95, 0.3, 32.0), // wet, slightly shiny scales
+        portal,
+        foxfire,
         window,
         awning: textured("awning", 0.9, 0.05, 8.0),
         concrete: textured("concrete", 0.9, 0.05, 8.0),
@@ -343,7 +360,7 @@ fn build_torii(scene: &mut Scene, m: &Materials, center_x: i32, z: i32, base: i3
 /// A gable roof over the box x0..=x1, z0..=z1, starting at height `y`.
 /// Each layer is one block higher and one block narrower front-to-back,
 /// until it meets at the ridge (which runs left-right along X).
-fn build_gable_roof(scene: &mut Scene, material: usize, x0: i32, x1: i32, z0: i32, z1: i32, y: i32) -> i32 {
+pub(crate) fn build_gable_roof(scene: &mut Scene, material: usize, x0: i32, x1: i32, z0: i32, z1: i32, y: i32) -> i32 {
     let mut layer = 0;
     while z0 - 1 + layer <= z1 + 1 - layer {
         scene.fill((x0 - 1, y + layer, z0 - 1 + layer), (x1 + 1, y + layer, z1 + 1 - layer), material);
@@ -490,6 +507,32 @@ fn build_cave_hill(scene: &mut Scene, m: &Materials) {
     for (x, z) in [(-22, -24), (-24, -22), (-23, -23)] {
         scene.add_block_if_empty(x, HILL_TOP + 3, z, m.leaves);
     }
+
+    // The portal: a 3×3 glowing sheet against the chamber's back wall,
+    // facing the tunnel. Clicking it travels to the spirit world.
+    scene.fill((-30, HILL_TOP + 1, -29), (-30, HILL_TOP + 3, -27), m.portal);
+    // Its violet light fills the chamber and spills down the tunnel.
+    scene.point_lights.push(PointLight {
+        position: Vec3::new(-28.0, HILL_TOP as f32 + 2.5, -27.5),
+        color: Color::new(0.9, 0.5, 1.3),
+        radius: 10.0,
+    });
+    // Blue fox-fire crystals on the tunnel floor: a faint trail of glow
+    // leading inside, with a soft blue light over them.
+    for (x, z) in [(-24, -25), (-25, -24), (-27, -26), (-26, -28)] {
+        scene.add_block(x, HILL_TOP + 1, z, m.foxfire);
+    }
+    scene.point_lights.push(PointLight {
+        position: Vec3::new(-24.5, HILL_TOP as f32 + 2.5, -24.5),
+        color: Color::new(0.3, 0.6, 1.2),
+        radius: 5.0,
+    });
+}
+
+/// Arriving back from the spirit world: just outside the cave mouth,
+/// looking out over the shrine grounds.
+pub fn arrival() -> Controls {
+    Controls::new(Vec3::new(-18.5, HILL_TOP as f32 + 4.0, -18.5), Vec3::new(-8.0, HILL_TOP as f32 + 1.5, -8.0), 60.0)
 }
 
 // ============================ Town ============================
@@ -639,7 +682,7 @@ fn build_pine_tree(scene: &mut Scene, m: &Materials, x: i32, z: i32, ground: i32
 
 /// A repeatable "random" number from 0 to 99 for a block position.
 /// Same position = same number every run, so the scene never changes.
-fn noise(x: i32, y: i32, z: i32) -> u32 {
+pub(crate) fn noise(x: i32, y: i32, z: i32) -> u32 {
     let mut h = (x as u32).wrapping_mul(73_856_093)
         ^ (y as u32).wrapping_mul(19_349_663)
         ^ (z as u32).wrapping_mul(83_492_791);

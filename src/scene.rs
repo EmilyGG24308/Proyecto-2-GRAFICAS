@@ -47,6 +47,18 @@ pub struct Scene {
     /// group can be skipped with one box test. Rebuilt by Animation::update.
     /// Simplification: they don't cast shadows.
     pub particle_groups: Vec<ParticleGroup>,
+    /// Lanterns and other local lights, in addition to the sun.
+    pub point_lights: Vec<PointLight>,
+}
+
+/// A light at one point (a lantern, the portal) that lights everything around
+/// it, fading to nothing at `radius` blocks away.
+pub struct PointLight {
+    /// In diorama space. Keep it just OUTSIDE any block (e.g. just below a
+    /// lantern), or its shadow rays would be blocked by the lantern itself.
+    pub position: Vec3,
+    pub color: Color,
+    pub radius: f32,
 }
 
 pub struct ParticleGroup {
@@ -78,12 +90,13 @@ impl Scene {
             skybox_faces: None,
             time: 0.0,
             particle_groups: Vec::new(),
+            point_lights: Vec::new(),
         }
     }
 
-    /// Loads the six skybox faces (assets/textures/sky_px.bmp, sky_nx.bmp, ...).
-    pub fn load_skybox(&mut self) {
-        self.skybox_faces = Some(cubemap::FACE_NAMES.map(|name| self.load_texture(name)));
+    /// Loads the six skybox faces, e.g. for "sky": assets/textures/sky_px.bmp, sky_nx.bmp, ...
+    pub fn load_skybox(&mut self, name: &str) {
+        self.skybox_faces = Some(cubemap::FACE_SUFFIXES.map(|suffix| self.load_texture(&format!("{name}_{suffix}"))));
     }
 
     /// The sky seen looking in WORLD direction `direction` (any length).

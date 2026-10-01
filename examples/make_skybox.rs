@@ -1,8 +1,9 @@
-//! Development tool, NOT part of the renderer: paints the six skybox images
-//! into assets/textures/sky_*.bmp. The renderer only reads those BMP files.
+//! Development tool, NOT part of the renderer: paints the skybox images into
+//! assets/textures/sky_*.bmp (day, Scene 1) and night_*.bmp (Scene 2).
+//! The renderer only reads those BMP files.
 //!
 //!     cargo run --release --example make_skybox                  (only writes missing files)
-//!     cargo run --release --example make_skybox -- --overwrite   (repaints all six)
+//!     cargo run --release --example make_skybox -- --overwrite   (repaints all twelve)
 //!
 //! How: for every pixel of every face we work out which direction in the world
 //! it shows (the same cube-map math the renderer uses, from src/cubemap.rs) and
@@ -25,6 +26,8 @@ use std::path::Path;
 const FACE_SIZE: usize = 256;
 /// Must match the sun in src/shrine.rs so the painted sun and the shadows agree.
 const SUN_DIRECTION: [f32; 3] = [0.35, 1.0, 0.8];
+/// Must match the moon in src/spirit.rs for the same reason.
+const MOON_DIRECTION: [f32; 3] = [-0.4, 0.55, -0.75];
 /// Levels per color channel after snapping (fewer = more "pixel art").
 const COLOR_LEVELS: f32 = 28.0;
 
@@ -35,6 +38,7 @@ fn main() {
     fs::create_dir_all(&folder).expect("could not create assets/textures");
     let overwrite = std::env::args().any(|argument| argument == "--overwrite");
     let sun = normalize(SUN_DIRECTION);
+    let moon = normalize(MOON_DIRECTION);
 
     // Safety check: the painter's mapping and the renderer's must agree, or the
     // sky would appear on the wrong faces.
@@ -44,26 +48,90 @@ fn main() {
         assert!(back_face == face && (u - 0.25).abs() < 1e-5 && (v - 0.75).abs() < 1e-5);
     }
 
-    for (face, name) in cubemap::FACE_NAMES.iter().enumerate() {
-        let path = folder.join(format!("{name}.bmp"));
-        if path.exists() && !overwrite {
-            println!("kept  {} (already exists)", path.display());
-            continue;
-        }
-        let mut pixels = Vec::with_capacity(FACE_SIZE * FACE_SIZE);
-        for y in 0..FACE_SIZE {
-            for x in 0..FACE_SIZE {
-                // Center of this pixel on the face, then the world direction it shows.
-                let u = (x as f32 + 0.5) / FACE_SIZE as f32;
-                let v = (y as f32 + 0.5) / FACE_SIZE as f32;
-                let (dx, dy, dz) = cubemap::direction_for(face, u, v);
-                let color = sky_at(normalize([dx, dy, dz]), sun);
-                pixels.push(snap_to_palette(color, x, y));
+    let day = |d: Rgb| sky_at(d, sun);
+    let night = |d: Rgb| night_sky_at(d, moon);
+    let skies: [(&str, &dyn Fn(Rgb) -> Rgb); 2] = [("sky", &day), ("night", &night)];
+
+    for (sky_name, paint) in skies {
+        for (face, suffix) in cubemap::FACE_SUFFIXES.iter().enumerate() {
+            let path = folder.join(format!("{sky_name}_{suffix}.bmp"));
+            if path.exists() && !overwrite {
+                println!("kept  {} (already exists)", path.display());
+                continue;
             }
+            let mut pixels = Vec::with_capacity(FACE_SIZE * FACE_SIZE);
+            for y in 0..FACE_SIZE {
+                for x in 0..FACE_SIZE {
+                    // Center of this pixel on the face, then the world direction it shows.
+                    let u = (x as f32 + 0.5) / FACE_SIZE as f32;
+                    let v = (y as f32 + 0.5) / FACE_SIZE as f32;
+                    let (dx, dy, dz) = cubemap::direction_for(face, u, v);
+                    pixels.push(snap_to_palette(paint(normalize([dx, dy, dz])), x, y));
+                }
+            }
+            write_bmp(&path, FACE_SIZE, &pixels).expect("could not write skybox face");
+            println!("wrote {}", path.display());
         }
-        write_bmp(&path, FACE_SIZE, &pixels).expect("could not write skybox face");
-        println!("wrote {}", path.display());
     }
+}
+
+/// The night sky over the spirit world: deep indigo fading to a magenta glow
+/// at the horizon, stars, a big pale moon (in the SAME direction as the
+/// scene's moonlight), thin purple clouds, dark hills dotted with tiny warm
+/// lantern lights, and a dark sea of clouds below.
+fn night_sky_at(d: Rgb, moon: Rgb) -> Rgb {
+    let [x, y, z] = d;
+
+    let horizon = [0.46, 0.18, 0.42];
+    let middle = [0.17, 0.08, 0.3];
+    let zenith = [0.05, 0.04, 0.15];
+    let mut color = if y >= 0.0 {
+        let t = y.powf(0.45);
+        if t < 0.5 { mix(horizon, middle, t * 2.0) } else { mix(middle, zenith, t * 2.0 - 1.0) }
+    } else {
+        let bumps = fbm(x / (0.2 - y) * 3.0, z / (0.2 - y) * 3.0, 17);
+        mix(mix([0.3, 0.13, 0.32], [0.1, 0.06, 0.18], (-y).powf(0.5)), [0.36, 0.2, 0.4], smoothstep(0.55, 0.75, bumps) * 0.5)
+    };
+
+    // Stars: chop the sky into tiny cells by direction, and light up the rare
+    // cell whose random number is high. Fewer near the bright horizon.
+    if y > 0.03 {
+        let cell = ((x * 180.0).floor() as i32, (y * 180.0).floor() as i32);
+        let star = hash(cell, (z * 180.0).floor() as i32 as u32 ^ 77);
+        if star > 0.994 {
+            let brightness = 0.5 + (star - 0.994) / 0.006 * 0.5;
+            color = mix(color, [1.0, 0.97, 0.9], brightness * smoothstep(0.03, 0.25, y));
+        }
+    }
+
+    // Thin clouds, faintly lit by the moon.
+    if y > 0.0 {
+        let ceiling = y + 0.15;
+        let density = fbm(x / ceiling * 1.1 + 40.0, z / ceiling * 2.2, 11);
+        let amount = smoothstep(0.55, 0.7, density) * smoothstep(0.0, 0.15, y) * 0.55;
+        let near_moon = dot(d, moon).max(0.0).powf(6.0);
+        color = mix(color, mix([0.32, 0.18, 0.42], [0.75, 0.62, 0.85], near_moon), amount);
+    }
+
+    // The moon: a soft halo, then the disc with a few darker patches.
+    let toward_moon = dot(d, moon).max(0.0);
+    color = add(color, scale([0.55, 0.45, 0.75], toward_moon.powf(40.0) * 0.4));
+    if toward_moon > 0.9975 {
+        let patches = fbm(x * 90.0, y * 90.0, 23);
+        color = mix([1.0, 0.96, 0.86], [0.82, 0.78, 0.74], smoothstep(0.5, 0.7, patches));
+    }
+
+    // Dark hills on the horizon, with tiny warm lights from far-off lanterns.
+    let angle = x.atan2(-z);
+    let (ring_x, ring_z) = (angle.cos() * 2.5 + 50.0, angle.sin() * 2.5 + 50.0);
+    let ridge = 0.02 + 0.16 * smoothstep(0.3, 0.72, fbm(ring_x, ring_z, 13));
+    if y < ridge && y > -0.06 {
+        color = mix([0.07, 0.04, 0.12], [0.14, 0.07, 0.2], smoothstep(-0.06, ridge, y));
+        if hash(((angle * 260.0) as i32, (y * 260.0) as i32), 31) > 0.988 {
+            color = [1.0, 0.62, 0.3];
+        }
+    }
+    color
 }
 
 /// The color of the sky looking in unit direction `d`.
