@@ -103,6 +103,31 @@ pub fn build_spirit_world() -> World {
         }
     }
 
+    // Extra lantern poles on street corners for dramatic red-light district vibe
+    for (x, z) in [(-28, -15), (28, -15), (-28, 8), (28, 8)] {
+        for dy in 0..3 {
+            scene.add_block(x, GROUND_TOP + 2 + dy, z, m.dark_wood);
+        }
+        scene.add_block(x, GROUND_TOP + 5, z, m.lantern);
+        scene.add_block(x + 1, GROUND_TOP + 5, z, m.lantern);
+        scene.add_block(x, GROUND_TOP + 5, z + 1, m.lantern);
+        add_lantern_light(&mut scene, x, GROUND_TOP + 6, z);
+        add_lantern_light(&mut scene, x + 1, GROUND_TOP + 6, z);
+    }
+
+    // Small paper lanterns on alley posts (10 more) for deep atmospheric detail
+    for (x, z) in [(-20, -20), (-20, 0), (-20, 15), (20, -20), (20, 0), (20, 15),
+                    (-8, -30), (8, -30), (-8, 25), (8, 25)] {
+        for dy in 1..3 {
+            scene.add_block(x, GROUND_TOP + dy, z, m.dark_wood);
+        }
+        scene.add_block(x, GROUND_TOP + 3, z, m.lantern);
+        if (x + z).abs() % 2 == 0 {
+            add_lantern_light(&mut scene, x, GROUND_TOP + 4, z);
+        }
+    }
+
+    build_small_stalls(&mut scene, &m);
     build_spirit_orb(&mut scene, &m);
     build_portal_gate(&mut scene, &m);
     for (x, z) in [(-9, 19), (7, 16)] {
@@ -318,6 +343,23 @@ fn build_glowing_sakura(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
                 scene.add_block_if_empty(bx, by, bz, m.sakura);
             }
         }
+    }
+}
+
+/// Small vendor stalls and food shops scattered in the alley streets
+fn build_small_stalls(scene: &mut Scene, m: &Materials) {
+    // Noodle vendor stall: small wooden structure with red roof
+    let stalls = [(-15, -22), (15, -22), (-12, 10), (12, 10), (-10, -8), (10, 5)];
+    for &(x, z) in &stalls {
+        // Counter: 3×2 blocks
+        scene.fill((x, GROUND_TOP + 1, z), (x + 1, GROUND_TOP + 1, z + 1), m.dark_wood);
+        // Small roof/awning: 2 blocks tall
+        for dy in 0..2 {
+            scene.add_block(x, GROUND_TOP + 2 + dy, z, m.roof);
+            scene.add_block(x + 1, GROUND_TOP + 2 + dy, z, m.roof);
+        }
+        // Red lantern on corner
+        scene.add_block(x + 1, GROUND_TOP + 4, z + 1, m.lantern);
     }
 }
 

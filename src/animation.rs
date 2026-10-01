@@ -124,7 +124,6 @@ impl Animation {
         let forward = heading.normalized();
         let side = Vec3::new(forward.z, 0.0, -forward.x); // horizontal, perpendicular to forward
         let up = Vec3::new(0.0, 1.0, 0.0);
-        let wag = (time * 7.0 + koi.phase).sin() * 0.08;
         let tail_wag = (time * 5.5 + koi.phase).sin() * 0.12;
 
         let (orange, white) = (self.koi_orange, self.koi_white);

@@ -63,7 +63,6 @@ struct Materials {
     azalea: usize,
     banner: usize,
     red_lantern: usize,
-    guide_light: usize,
 }
 
 /// Builds the scene, plus the Animation that moves its petals and koi.
@@ -237,12 +236,6 @@ fn add_materials(scene: &mut Scene) -> Materials {
     });
     let foxfire_texture = scene.load_texture("foxfire");
     let foxfire = scene.add_material(Material { glow: 1.2, ..Material::opaque(foxfire_texture, 0.9, 0.2, 16.0) });
-    // Glowing guide lights: soft cyan orbs that lead to the cave.
-    let guide_light_texture = scene.load_texture("plaster");
-    let guide_light = scene.add_material(Material {
-        glow: 1.0,
-        ..Material::opaque(guide_light_texture, 0.95, 0.6, 32.0)
-    });
     // Window glass: opaque (the houses are solid), but it mirrors the sky.
     let window_texture = scene.load_texture("window");
     let window = scene.add_material(Material {
@@ -287,7 +280,6 @@ fn add_materials(scene: &mut Scene) -> Materials {
         hydrangea: textured("hydrangea", 0.95, 0.02, 4.0),
         azalea: textured("azalea", 0.95, 0.02, 4.0),
         banner: textured("banner", 0.95, 0.0, 1.0),
-        guide_light,
     }
 }
 

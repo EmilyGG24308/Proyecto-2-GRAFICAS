@@ -1,0 +1,56 @@
+﻿    Finished `release` profile [optimized] target(s) in 0.03s
+     Running unittests src\main.rs (target\release\deps\mikage_shrine-5284326261c696e9.exe)
+
+running 35 tests
+test animation::tests::petal_stays_between_its_tree_and_the_ground ... ok
+test animation::tests::same_time_gives_the_same_position ... ok
+test cube::tests::cube_behind_the_ray_misses ... ok
+test camera::tests::top_left_pixel_points_up_and_left ... ok
+test controls::tests::starting_view_looks_at_the_requested_target ... ok
+test camera::tests::center_pixel_looks_straight_ahead ... ok
+test cube::tests::hits_front_face_from_outside ... ok
+test cube::tests::hits_top_face_from_above ... ok
+test cube::tests::ray_starting_inside_hits_exit_face ... ok
+test cubemap::tests::each_axis_hits_the_center_of_its_face ... ok
+test cubemap::tests::neighboring_faces_meet_at_the_same_edge ... ok
+test cube::tests::parallel_ray_outside_misses ... ok
+test cubemap::tests::side_faces_have_the_sky_at_the_top ... ok
+test grid::tests::a_mini_block_is_hit_at_its_own_quarter_size_face ... ok
+test grid::tests::distance_limit_is_respected ... ok
+test cubemap::tests::face_to_direction_and_back_round_trips_on_every_face ... ok
+test grid::tests::ray_from_inside_grid_hits_back_face ... ok
+test grid::tests::ray_from_outside_hits_front_face ... ok
+test renderer::tests::entering_water_at_45_degrees_bends_toward_the_normal ... ok
+test renderer::tests::a_flat_slab_shifts_the_ray_but_keeps_its_direction ... ok
+test renderer::tests::leaving_water_at_a_shallow_angle_is_total_internal_reflection ... ok
+test renderer::tests::perfect_mirror_shows_the_sky_in_the_mirrored_direction ... ok
+test renderer::tests::looking_straight_down_is_not_bent ... ok
+test renderer::tests::perfectly_clear_blocks_are_invisible ... ok
+test renderer::tests::side_face_uv_is_upright_and_not_mirrored ... ok
+test renderer::tests::two_facing_mirrors_stop_after_max_bounces ... ok
+test scene::tests::a_quarter_turn_moves_the_front_to_the_side ... ok
+test scene::tests::nearer_block_wins ... ok
+test scene::tests::shadow_ray_is_blocked_by_block_above ... ok
+test scene::tests::turning_and_turning_back_gives_the_original_direction ... ok
+test texture::tests::sampling_picks_the_right_texel_and_clamps_edges ... ok
+test grid::tests::grid_walk_matches_brute_force ... ok
+test texture::tests::bmp_round_trip_keeps_pixels_and_orientation ... ok
+test spirit::tests::aiming_at_the_spirit_world_gate_hits_the_portal ... FAILED
+test spirit::tests::aiming_at_the_cave_portal_hits_the_portal ... ok
+
+failures:
+
+---- spirit::tests::aiming_at_the_spirit_world_gate_hits_the_portal stdout ----
+
+thread 'spirit::tests::aiming_at_the_spirit_world_gate_hits_the_portal' (27388) panicked at src\spirit.rs:383:9:
+assertion failed: crosshair_hits_portal(&world, Vec3::new(0.5, 7.5, 18.5),
+    Vec3::new(0.5, 7.5, 25.0))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    spirit::tests::aiming_at_the_spirit_world_gate_hits_the_portal
+
+test result: FAILED. 34 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `--bin mikage_shrine`
