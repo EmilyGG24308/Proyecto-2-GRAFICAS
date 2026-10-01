@@ -381,6 +381,16 @@ fn build_hilltop_paths(scene: &mut Scene, m: &Materials) {
     scene.fill((-5, HILL_TOP, -22), (5, HILL_TOP, -19), m.path_stone); // plaza
     scene.fill((6, HILL_TOP, -20), (7, HILL_TOP, -18), m.path_stone); // plaza → bridge
 
+    // Decorative viewing platform on the hilltop with railings
+    let viewing_x = (8, 10);
+    let viewing_z = (-23, -20);
+    scene.fill((viewing_x.0, HILL_TOP, viewing_z.0), (viewing_x.1, HILL_TOP, viewing_z.1), m.path_stone);
+    // Railing: mini-block posts at corners
+    for (x, z) in [(viewing_x.0, viewing_z.0), (viewing_x.0, viewing_z.1), (viewing_x.1, viewing_z.0), (viewing_x.1, viewing_z.1)] {
+        let (bx, by, bz) = (x * MINI, (HILL_TOP + 1) * MINI, z * MINI);
+        scene.fill_mini((bx, by, bz), (bx + 1, by + 3, bz + 1), m.lacquer);
+    }
+
     // The cave trail: 2-wide stepping stones through a list of turning points,
     // ending at the cave's torii.
     let turns: [(i32, i32); 5] = [(-3, -10), (-11, -9), (-17, -11), (-23, -12), (-23, -15)];
