@@ -27,19 +27,15 @@ use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use vec3::Vec3;
 
-/// Live (interactive) resolution. Each rendered pixel becomes a
-/// PIXEL_SCALE × PIXEL_SCALE block in the 1280×720 window.
 const RENDER_WIDTH: usize = 640;
 const RENDER_HEIGHT: usize = 360;
 const PIXEL_SCALE: usize = 2;
-/// Resolution for screenshots (F12 and --snapshot --hd): full window size.
 const HD_WIDTH: usize = 1280;
 const HD_HEIGHT: usize = 720;
 
 const WINDOW_TITLE: &str = "Mikage Shrine Raytracer";
 const WORLD_NAMES: [&str; 2] = ["Mikage Shrine", "Spirit World"];
 
-/// Traveling through a portal: fade out to a soft violet, swap worlds, fade in.
 const FADE_SECONDS: f32 = 0.9;
 const FADE_COLOR: Color = Color::new(0.85, 0.7, 1.0);
 
@@ -56,29 +52,21 @@ enum GameState {
 
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
-    // Both worlds are built once at startup; the portal just switches between them.
     let mut worlds = [shrine::build_shrine_world(), spirit::build_spirit_world()];
     let block_counts = worlds.each_ref().map(|world| world.scene.blocks.block_count());
-    // `--spirit` starts in the spirit world.
     let mut current = if std::env::args().any(|argument| argument == "--spirit") { 1 } else { 0 };
-    // N key (or --normals) shows each face's normal as a color, to check the faces.
     let mut show_normals = std::env::args().any(|argument| argument == "--normals");
 
-    // `cargo run --release -- --snapshot` renders one frame to a file and exits,
-    // without opening a window. Handy for checking output and for the README.
-    // Add `--hd` to render that frame at 1280×720 instead.
     if std::env::args().any(|argument| argument == "--snapshot") {
         let world = &mut worlds[current];
         let default_view = if current == 0 { starting_controls() } else { (world.arrival)() };
         let camera = camera_from_arguments().unwrap_or_else(|| default_view.camera());
-        // `--turn=45` turns the diorama 45° first, like holding Q.
         if let Some(degrees) = std::env::args().find_map(|a| a.strip_prefix("--turn=").and_then(|d| d.parse::<f32>().ok())) {
             world.scene.set_turn_angle(degrees.to_radians());
         }
         if std::env::args().any(|argument| argument == "--hd") {
             framebuffer = Framebuffer::new(HD_WIDTH, HD_HEIGHT);
         }
-        // `--time=12.5` freezes the animation at that moment (default: 0).
         let time = std::env::args().find_map(|a| a.strip_prefix("--time=").and_then(|t| t.parse::<f32>().ok()));
         world.animation.update(&mut world.scene, time.unwrap_or(0.0));
         render_frame(&mut framebuffer, &camera, &world.scene, show_normals);
@@ -107,7 +95,6 @@ fn main() {
     let mut last_title_update = Instant::now();
 
     while window.process_events() {
-        // Esc gives the mouse back first; pressing it again quits.
         if window.was_key_pressed(key::ESCAPE) {
             if matches!(game_state, GameState::Playing) && window.is_mouse_captured() {
                 window.set_mouse_captured(false);
@@ -119,28 +106,24 @@ fn main() {
             show_normals = !show_normals;
         }
 
-        // Homepage: click to start exploring
         if matches!(game_state, GameState::Homepage) {
             if window.left_click().is_some() {
                 game_state = GameState::Playing;
-                current = 0; // Start in shrine world
+                current = 0;
                 controls = starting_controls();
-                window.set_title("Entering the Shrine...");
             }
-            // Draw homepage
             draw_homepage(&mut framebuffer);
             window.present(&framebuffer);
             frames_since_title_update += 1;
             let elapsed = last_title_update.elapsed().as_secs_f32();
             if elapsed >= 0.5 {
-                window.set_title(&format!("{WINDOW_TITLE} — Click to Explore — Welcome to Mikage Shrine 🏯"));
+                window.set_title(&format!("{WINDOW_TITLE} — Haz clic para explorar 🏯"));
                 frames_since_title_update = 0;
                 last_title_update = Instant::now();
             }
             continue;
         }
 
-        // Time since the last frame, capped so a hiccup doesn't teleport you.
         let seconds = last_frame.elapsed().as_secs_f32().min(0.1);
         last_frame = Instant::now();
         let world = &mut worlds[current];
@@ -149,9 +132,6 @@ fn main() {
         world.scene.set_turn_angle(controls.diorama_angle);
         let camera = controls.camera();
 
-        // Clicking: the first click captures the mouse. After that, clicking
-        // "shoots" a ray through the crosshair (the center of the screen);
-        // if the first thing it hits is the portal, start the journey.
         if window.left_click().is_some() {
             if !window.is_mouse_captured() {
                 window.set_mouse_captured(true);
@@ -164,11 +144,8 @@ fn main() {
             }
         }
 
-        // 1. RENDER: compute every pixel's color into our own memory.
         render_frame(&mut framebuffer, &camera, &world.scene, show_normals);
 
-        // The portal journey: fade out, switch worlds while the screen is
-        // fully violet, then fade back in at the other world's arrival point.
         let fade_amount = match fade {
             Fade::None => 0.0,
             Fade::Out { since } => {
@@ -189,49 +166,40 @@ fn main() {
             }
         };
         if fade_amount > 0.0 {
-            // Smoothstep: starts and ends gently instead of abruptly.
             framebuffer.fade_toward(FADE_COLOR, fade_amount * fade_amount * (3.0 - 2.0 * fade_amount));
         } else if window.is_mouse_captured() {
             framebuffer.draw_crosshair();
         }
 
-        // 2. DISPLAY: hand the finished image to Windows to show.
         window.present(&framebuffer);
 
         if window.was_key_pressed(key::F12) {
-            // Screenshots are rendered again at full resolution: sharper than the live view.
             let mut screenshot = Framebuffer::new(HD_WIDTH, HD_HEIGHT);
             render_frame(&mut screenshot, &camera, &worlds[current].scene, show_normals);
             save_screenshot(&screenshot);
         }
 
-        // Title bar: FPS, plus a hint while the mouse isn't captured.
         frames_since_title_update += 1;
         let elapsed = last_title_update.elapsed().as_secs_f32();
         if elapsed >= 0.5 {
             let fps = frames_since_title_update as f32 / elapsed;
             let hint = if window.is_mouse_captured() {
-                "WASD move · Space/Shift up/down · wheel zoom · Q/E turn diorama · R reset · click the portal · Esc release mouse"
+                "WASD mover · Espacio/Mayús arriba/abajo · rueda zoom · Q/E girar · R reestablec · clic portal · Esc liberar"
             } else {
-                "click to look around"
+                "clic para mirar"
             };
             let (name, blocks) = (WORLD_NAMES[current], block_counts[current]);
-            window.set_title(&format!("{WINDOW_TITLE} — {name} — {fps:.0} FPS — {blocks} blocks — {hint}"));
+            window.set_title(&format!("{WINDOW_TITLE} — {name} — {fps:.0} FPS — {blocks} bloques — {hint}"));
             frames_since_title_update = 0;
             last_title_update = Instant::now();
         }
     }
 }
 
-/// The overview the program starts with (and R returns to).
 fn starting_controls() -> Controls {
-    // First-person POV in front of the temple, looking back toward the shrine and town
     Controls::new(Vec3::new(0.0, 18.0, 20.0), Vec3::new(0.0, 16.0, -10.0), 50.0)
 }
 
-
-/// `--camera=px,py,pz,tx,ty,tz[,fov]` places the camera at p looking at t.
-/// Used to take test snapshots from specific spots.
 fn camera_from_arguments() -> Option<Camera> {
     let argument = std::env::args().find_map(|a| a.strip_prefix("--camera=").map(String::from))?;
     let numbers: Vec<f32> = argument.split(',').filter_map(|part| part.trim().parse().ok()).collect();
@@ -246,7 +214,6 @@ fn camera_from_arguments() -> Option<Camera> {
     })
 }
 
-/// Saves the framebuffer to screenshots/shot_<milliseconds>.bmp.
 fn save_screenshot(framebuffer: &Framebuffer) {
     let folder = PathBuf::from("screenshots");
     if let Err(error) = std::fs::create_dir_all(&folder) {
@@ -258,113 +225,105 @@ fn save_screenshot(framebuffer: &Framebuffer) {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     let path = folder.join(format!("shot_{milliseconds}.bmp"));
-
     match framebuffer.save_bmp(&path) {
         Ok(()) => println!("Saved {}", path.display()),
         Err(error) => eprintln!("Could not save {}: {error}", path.display()),
     }
 }
 
-/// Draw the homepage/intro screen
 fn draw_homepage(framebuffer: &mut Framebuffer) {
     let h = framebuffer.height;
+    let w = framebuffer.width;
 
-    // Gradient background
     for (y, (_, row)) in framebuffer.rows_mut().enumerate() {
         let t = y as f32 / h as f32;
-        let r = 0.88 + t * 0.08;
-        let g = 0.82 + t * 0.10;
-        let b = 0.96 - t * 0.06;
-        let color = Color::new(r, g, b);
+        let color = Color::new(0.88 + t * 0.08, 0.82 + t * 0.10, 0.96 - t * 0.06);
         for pixel in row {
             *pixel = color;
         }
     }
 
-    let title_color = Color::new(0.75, 0.4, 0.88);
-    let text_color = Color::new(0.5, 0.2, 0.7);
-    let accent_color = Color::new(1.0, 0.7, 0.85);
+    let title = Color::new(0.75, 0.4, 0.88);
+    let text = Color::new(0.5, 0.2, 0.7);
+    let accent = Color::new(1.0, 0.7, 0.85);
 
-    // Title
-    draw_text_simple(framebuffer, "MIKAGE SHRINE", 40, 30, 2, title_color);
+    print_centered(framebuffer, "SANTUARIO MIKAGE", 30, 2, title);
+    line_h(framebuffer, 50, 65, w - 50, accent);
 
-    // Decorative line
-    draw_horz_line(framebuffer, 0, 70, framebuffer.width, accent_color);
+    print_centered(framebuffer, "BIENVENIDO", 95, 1, text);
+    print_centered(framebuffer, "EXPLORA DOS MUNDOS", 120, 1, title);
+    print_centered(framebuffer, "Dimensión Santuario y Espíritu", 140, 1, text);
 
-    // Welcome
-    draw_text_simple(framebuffer, "WELCOME", 150, 100, 1, text_color);
-    draw_text_simple(framebuffer, "EXPLORE TWO WORLDS", 100, 130, 1, title_color);
-    draw_text_simple(framebuffer, "Shrine & Spirit Dimension", 95, 150, 1, text_color);
+    print_centered(framebuffer, "CONOCE A TOMOE Y NANAMI", 175, 1, title);
+    print_centered(framebuffer, "Carpas y Pétalos Sakura Animados", 195, 1, text);
 
-    // Characters
-    draw_text_simple(framebuffer, "MEET TOMOE & NANAMI", 95, 185, 1, title_color);
-    draw_text_simple(framebuffer, "Animated Koi & Sakura Petals", 80, 205, 1, text_color);
+    print_centered(framebuffer, "CONTROLES", 230, 1, title);
+    print_centered(framebuffer, "WASD mover  Espacio/Mayús arriba/abajo", 250, 1, text);
+    print_centered(framebuffer, "Rueda zoom  Q/E girar  Esc menú", 265, 1, text);
 
-    // Controls
-    draw_text_simple(framebuffer, "CONTROLS", 155, 240, 1, title_color);
-    draw_text_simple(framebuffer, "WASD move | Space/Shift up/down", 60, 260, 1, text_color);
-    draw_text_simple(framebuffer, "Scroll zoom | Q/E rotate", 105, 275, 1, text_color);
-
-    // Action
-    draw_horz_line(framebuffer, 0, 300, framebuffer.width, accent_color);
-    draw_text_simple(framebuffer, "CLICK TO EXPLORE", 110, 320, 2, accent_color);
+    line_h(framebuffer, 50, 290, w - 50, accent);
+    print_centered(framebuffer, "HAZ CLIC PARA EXPLORAR", 315, 2, accent);
 }
 
-fn draw_text_simple(framebuffer: &mut Framebuffer, text: &str, x: usize, y: usize, scale: usize, color: Color) {
-    let mut pos_x = x;
+fn print_centered(fb: &mut Framebuffer, text: &str, y: usize, scale: usize, color: Color) {
+    let char_w = 12 * scale;
+    let total_w = text.len() * char_w;
+    let start_x = (fb.width - total_w) / 2;
+    let mut x = start_x;
     for ch in text.chars() {
-        draw_char_block(framebuffer, ch, pos_x, y, scale, color);
-        pos_x += 8 * scale + 2;
+        print_char(fb, ch, x, y, scale, color);
+        x += char_w;
     }
 }
 
-fn draw_char_block(framebuffer: &mut Framebuffer, ch: char, x: usize, y: usize, scale: usize, color: Color) {
-    let s = scale as i32;
-    match ch.to_ascii_uppercase() {
-        'A'..='Z' | '0'..='9' => {
-            for dy in 0..8 {
-                for dx in 0..6 {
-                    let px = x + dx * scale;
-                    let py = y + dy * scale;
-                    if px < framebuffer.width && py < framebuffer.height {
-                        let should_fill = match ch.to_ascii_uppercase() {
-                            'A' => (dy == 0 && dx >= 1 && dx <= 4) || (dy == 3 && dx >= 1 && dx <= 4) || (dx == 0 || dx == 5),
-                            'C' => (dy == 0 || dy == 7) || (dx == 5),
-                            'E' => (dy == 0 || dy == 3 || dy == 7) || (dx == 0),
-                            'H' => (dx == 0 || dx == 5) || (dy == 3 && dx >= 0 && dx <= 5),
-                            'I' => dx >= 2 && dx <= 3,
-                            'K' => (dx == 0) || (dx == 5 && dy <= 3) || (dx == 4 && dy >= 3),
-                            'M' => (dx == 0 || dx == 5) || (dx == 2 && dy <= 3) || (dx == 3 && dy <= 3),
-                            'N' => (dx == 0 || dx == 5) || (dx == 3 && dy >= 2 && dy <= 5),
-                            'O' => (dy == 0 || dy == 7) || (dx == 0 || dx == 5),
-                            'P' => (dx == 0) || (dy == 0 || dy == 3 || dy == 4) || (dx == 5 && dy <= 3),
-                            'S' => (dy == 0 || dy == 3 || dy == 7) || (dx == 0 && dy >= 3 && dy <= 7) || (dx == 5 && dy <= 3),
-                            'T' => (dy == 0) || (dx >= 2 && dx <= 3),
-                            'U' => (dx == 0 || dx == 5) || (dy == 7 && dx >= 0 && dx <= 5),
-                            'W' => (dx == 0 || dx == 5) || (dx == 2 && dy >= 3) || (dx == 3 && dy >= 3),
-                            'Y' => (dx == 0 || dx == 5) && dy <= 3 || (dx >= 2 && dx <= 3) && dy >= 3,
-                            'Z' => (dy == 0 || dy == 7) || (dx == 5 && dy <= 3) || (dx == 0 && dy >= 4),
-                            ' ' => false,
-                            _ => dx == 0 || dx == 5 || dy == 0 || dy == 7,
-                        };
-                        if should_fill {
-                            if let Some((_, row)) = framebuffer.rows_mut().nth(py) {
-                                if px < row.len() {
-                                    row[px] = color;
-                                }
-                            }
+fn print_char(fb: &mut Framebuffer, ch: char, x: usize, y: usize, s: usize, color: Color) {
+    let mut cell = |dx: usize, dy: usize| {
+        let px = x + dx * s;
+        let py = y + dy * s;
+        if px < fb.width && py < fb.height {
+            for sy in 0..s {
+                for sx in 0..s {
+                    if let Some((_, row)) = fb.rows_mut().nth(py + sy) {
+                        if px + sx < row.len() {
+                            row[px + sx] = color;
                         }
                     }
                 }
             }
         }
-        _ => {}
+    };
+
+    match ch.to_ascii_uppercase() {
+        'A' => { cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(4,2); cell(0,3); cell(1,3); cell(2,3); cell(3,3); cell(4,3); cell(0,4); cell(4,4); },
+        'B' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(1,2); cell(2,2); cell(3,2); cell(0,3); cell(4,3); cell(0,4); cell(1,4); cell(2,4); cell(3,4); },
+        'C' => { cell(1,0); cell(2,0); cell(3,0); cell(4,0); cell(0,1); cell(0,2); cell(0,3); cell(1,4); cell(2,4); cell(3,4); cell(4,4); },
+        'D' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(4,2); cell(0,3); cell(4,3); cell(0,4); cell(1,4); cell(2,4); cell(3,4); },
+        'E' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(4,0); cell(0,1); cell(0,2); cell(1,2); cell(2,2); cell(3,2); cell(0,3); cell(0,4); cell(1,4); cell(2,4); cell(3,4); cell(4,4); },
+        'H' => { cell(0,0); cell(4,0); cell(0,1); cell(4,1); cell(0,2); cell(1,2); cell(2,2); cell(3,2); cell(4,2); cell(0,3); cell(4,3); cell(0,4); cell(4,4); },
+        'I' => { cell(1,0); cell(2,0); cell(3,0); cell(2,1); cell(2,2); cell(2,3); cell(1,4); cell(2,4); cell(3,4); },
+        'L' => { cell(0,0); cell(0,1); cell(0,2); cell(0,3); cell(0,4); cell(1,4); cell(2,4); cell(3,4); cell(4,4); },
+        'M' => { cell(0,0); cell(4,0); cell(0,1); cell(1,1); cell(3,1); cell(4,1); cell(0,2); cell(2,2); cell(4,2); cell(0,3); cell(4,3); cell(0,4); cell(4,4); },
+        'N' => { cell(0,0); cell(4,0); cell(0,1); cell(1,1); cell(4,1); cell(0,2); cell(2,2); cell(4,2); cell(0,3); cell(3,3); cell(4,3); cell(0,4); cell(4,4); },
+        'O' => { cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(4,2); cell(0,3); cell(4,3); cell(1,4); cell(2,4); cell(3,4); },
+        'P' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(1,2); cell(2,2); cell(3,2); cell(0,3); cell(0,4); },
+        'R' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(0,1); cell(4,1); cell(0,2); cell(1,2); cell(2,2); cell(3,2); cell(0,3); cell(3,3); cell(0,4); cell(4,4); },
+        'S' => { cell(1,0); cell(2,0); cell(3,0); cell(4,0); cell(0,1); cell(1,2); cell(2,2); cell(3,2); cell(4,3); cell(1,4); cell(2,4); cell(3,4); },
+        'T' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(4,0); cell(2,1); cell(2,2); cell(2,3); cell(2,4); },
+        'U' => { cell(0,0); cell(4,0); cell(0,1); cell(4,1); cell(0,2); cell(4,2); cell(0,3); cell(4,3); cell(1,4); cell(2,4); cell(3,4); },
+        'Y' => { cell(0,0); cell(4,0); cell(0,1); cell(4,1); cell(1,2); cell(3,2); cell(2,3); cell(2,4); },
+        'Z' => { cell(0,0); cell(1,0); cell(2,0); cell(3,0); cell(4,0); cell(3,1); cell(2,2); cell(1,3); cell(0,4); cell(1,4); cell(2,4); cell(3,4); cell(4,4); },
+        ' ' => {},
+        '&' => { cell(1,0); cell(2,0); cell(0,1); cell(3,1); cell(0,2); cell(2,2); cell(3,2); cell(4,2); cell(3,3); cell(1,4); cell(4,4); },
+        '/' => { cell(3,0); cell(3,1); cell(2,2); cell(1,3); cell(1,4); },
+        '.' => { cell(2,4); },
+        '-' => { cell(1,2); cell(2,2); cell(3,2); },
+        _ => {},
     }
 }
 
-fn draw_horz_line(framebuffer: &mut Framebuffer, x1: usize, y: usize, x2: usize, color: Color) {
-    if y < framebuffer.height {
-        if let Some((_, row)) = framebuffer.rows_mut().nth(y) {
+fn line_h(fb: &mut Framebuffer, x1: usize, y: usize, x2: usize, color: Color) {
+    if y < fb.height {
+        if let Some((_, row)) = fb.rows_mut().nth(y) {
             for x in x1..x2.min(row.len()) {
                 row[x] = color;
             }
