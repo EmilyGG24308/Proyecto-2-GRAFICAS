@@ -91,10 +91,15 @@ pub fn build_shrine_world() -> World {
     for x in [-3, 3] {
         build_guardian_statue(&mut scene, &m, x, -13);
     }
+    // Stone lanterns: original 4 corner positions plus 6 more for better lighting
     for x in [-4, 4] {
         for z in [-16, -20] {
             build_stone_lantern(&mut scene, &m, x, HILL_TOP + 1, z);
         }
+    }
+    // Additional lanterns along the pathways for depth and atmosphere
+    for (x, z) in [(-2, -10), (2, -10), (0, -25), (-6, -18), (6, -18), (-8, -10)] {
+        build_stone_lantern(&mut scene, &m, x, HILL_TOP + 1, z);
     }
     build_edge_wall(&mut scene, &m);
     build_pond_and_bridge(&mut scene, &m);
