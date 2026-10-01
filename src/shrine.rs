@@ -466,8 +466,9 @@ fn build_shrine_hall(scene: &mut Scene, m: &Materials) {
     for (x, z) in [(-9, -22), (9, -22), (-4, -22), (4, -22), (-9, -31), (9, -31), (0, -22)] {
         scene.fill((x, wall_bottom, z), (x, wall_top, z), m.lacquer);
     }
-    // Offering box in front of the doors.
-    scene.fill((-1, wall_bottom, -22), (1, wall_bottom, -22), m.dark_wood);
+    // Offering box in front of the doors (larger, more prominent)
+    scene.fill((-2, wall_bottom, -22), (2, wall_bottom, -22), m.dark_wood);
+    scene.fill((-1, wall_bottom + 1, -22), (1, wall_bottom + 1, -22), m.lacquer);
 
     let ridge = build_gable_roof(scene, m.roof_tile, -9, 9, -31, -22, wall_top + 1);
     // Ridge ornaments at both ends.
@@ -815,27 +816,27 @@ fn build_town(scene: &mut Scene, m: &Materials) {
         x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
     };
     for spec in [
-        // Left side: main street (more buildings, varied sizes)
+        // Left side: main street with varied building sizes
         house(-14, 11, -6, 17, 2, m.plaster, m.house_roof, false, true),
         house(-26, 11, -17, 17, 1, m.shrine_wood, m.roof_tile, true, true),
-        house(-13, 24, -6, 30, 2, m.plaster, m.roof_tile, false, false),
+        house(-13, 24, -6, 30, 3, m.plaster, m.roof_tile, false, false),  // Taller building
         house(-27, 24, -18, 30, 1, m.plaster, m.house_roof, true, false),
         house(-14, 11, -5, 16, 2, m.plaster, m.house_roof, false, true),
         house(-30, 16, -22, 22, 2, m.plaster, m.house_roof, true, false),
         // Right side: main street (more buildings)
         house(6, 11, 14, 17, 2, m.plaster, m.house_roof, false, true),
-        house(17, 11, 27, 17, 1, m.shrine_wood, m.roof_tile, true, true),
+        house(17, 11, 27, 17, 2, m.shrine_wood, m.roof_tile, true, true),  // Taller
         house(6, 24, 14, 30, 1, m.plaster, m.house_roof, true, false),
         house(17, 24, 26, 30, 2, m.shrine_wood, m.house_roof, false, false),
         house(7, 11, 15, 17, 2, m.plaster, m.roof_tile, false, true),
-        house(22, 16, 30, 22, 2, m.plaster, m.house_roof, true, true),
+        house(22, 16, 30, 22, 3, m.plaster, m.house_roof, true, true),  // Taller
         // Back expansion: more shops and homes
         house(-28, 8, -20, 13, 1, m.plaster, m.house_roof, true, false),
         house(20, 8, 28, 13, 1, m.shrine_wood, m.roof_tile, true, true),
         house(-25, -2, -15, 3, 2, m.plaster, m.house_roof, false, true),
         house(15, -2, 25, 3, 1, m.plaster, m.roof_tile, true, false),
-        // Far corners: small buildings
-        house(-40, -15, -32, -8, 1, m.shrine_wood, m.roof_tile, true, false),
+        // Far corners: varied heights for visual interest
+        house(-40, -15, -32, -8, 2, m.shrine_wood, m.roof_tile, true, false),  // Taller
         house(32, -15, 40, -8, 1, m.plaster, m.house_roof, true, true),
         house(-38, 20, -30, 27, 2, m.plaster, m.roof_tile, false, false),
         house(30, 20, 38, 27, 2, m.shrine_wood, m.house_roof, false, true),
