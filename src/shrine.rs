@@ -646,10 +646,16 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
         scene.add_block(x, HILL_TOP - 1, z, m.leaves);
     }
 
-    // Stepping stones across the pond for a traditional garden aesthetic
-    for (x, z) in [(8, -17), (14, -17), (20, -17), (16, -12), (16, -22)] {
+    // Stepping stones across the pond for a traditional garden aesthetic (now 8)
+    for (x, z) in [(8, -17), (14, -17), (20, -17), (16, -12), (16, -22), (10, -12), (22, -20), (12, -24)] {
         scene.add_block(x, HILL_TOP, z, m.path_stone);
     }
+
+    // More rocks on the pond floor for depth and visual interest (increased from 5 to 8)
+    for (x, z) in [(8, -20), (24, -18), (12, -10), (20, -12), (6, -14), (26, -22), (9, -24), (18, -8)] {
+        scene.fill((x, HILL_TOP - 4, z), (x, HILL_TOP - 2, z), m.rock);
+    }
+
     // (The koi are added by Animation - 9 of them swimming through this bigger space)
 
     // Bigger arched bridge (z = -19), now with wider approach
