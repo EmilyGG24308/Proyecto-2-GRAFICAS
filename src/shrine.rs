@@ -409,45 +409,46 @@ pub(crate) fn build_gable_roof(scene: &mut Scene, material: usize, x0: i32, x1: 
 
 /// The main hall: a raised stone base, a wooden veranda all around, walls of
 /// wood with paper (shoji) panels between red posts, and a big tiled roof.
+/// Bigger and more impressive version of the original.
 fn build_shrine_hall(scene: &mut Scene, m: &Materials) {
     let base = HILL_TOP + 1;
-    scene.fill((-9, base, -31), (9, base, -22), m.path_stone); // stone base
-    scene.fill((-2, base, -21), (2, base, -21), m.path_stone); // front step
-    scene.fill((-8, base + 1, -30), (8, base + 1, -23), m.shrine_wood); // veranda floor
-    scene.fill((-2, base + 1, -22), (2, base + 1, -22), m.shrine_wood); // entrance step
+    // Bigger stone platform
+    scene.fill((-10, base, -32), (10, base, -21), m.path_stone); // stone base
+    scene.fill((-2, base, -20), (2, base, -20), m.path_stone); // front steps
+    scene.fill((-9, base + 1, -31), (9, base + 1, -22), m.shrine_wood); // veranda floor
+    scene.fill((-2, base + 1, -21), (2, base + 1, -21), m.shrine_wood); // entrance step
 
-    // Walls (4 high), then the front facade drawn over them.
-    let (wall_bottom, wall_top) = (base + 2, base + 5);
-    scene.fill((-6, wall_bottom, -29), (6, wall_top, -25), m.shrine_wood);
-    for x in -6..=6 {
-        if [-6, -3, 3, 6].contains(&x) {
-            scene.fill((x, wall_bottom, -25), (x, wall_top, -25), m.lacquer); // posts
+    // Walls (5 high for grander appearance), then the front facade drawn over them.
+    let (wall_bottom, wall_top) = (base + 2, base + 6);
+    scene.fill((-8, wall_bottom, -30), (8, wall_top, -24), m.shrine_wood); // bigger wall
+    for x in -8..=8 {
+        if [-8, -4, 4, 8].contains(&x) {
+            scene.fill((x, wall_bottom, -24), (x, wall_top, -24), m.lacquer); // posts
         } else if x.abs() <= 2 {
-            scene.fill((x, wall_bottom, -25), (x, wall_top - 1, -25), m.paper); // sliding doors
+            scene.fill((x, wall_bottom, -24), (x, wall_top - 1, -24), m.paper); // sliding doors
         } else {
-            scene.fill((x, wall_bottom + 1, -25), (x, wall_top - 1, -25), m.paper); // windows
+            scene.fill((x, wall_bottom + 1, -24), (x, wall_top - 1, -24), m.paper); // windows
         }
     }
-    for x in [-6, 6] {
-        scene.fill((x, wall_bottom + 1, -28), (x, wall_top - 1, -26), m.paper); // side windows
+    for x in [-8, 8] {
+        scene.fill((x, wall_bottom + 1, -28), (x, wall_top - 1, -25), m.paper); // side windows
     }
-    // Veranda posts holding up the roof.
-    for (x, z) in [(-8, -23), (8, -23), (-4, -23), (4, -23), (-8, -30), (8, -30)] {
+    // Veranda posts holding up the roof (more posts for bigger structure).
+    for (x, z) in [(-9, -22), (9, -22), (-4, -22), (4, -22), (-9, -31), (9, -31), (0, -22)] {
         scene.fill((x, wall_bottom, z), (x, wall_top, z), m.lacquer);
     }
     // Offering box in front of the doors.
-    scene.fill((-1, wall_bottom, -23), (1, wall_bottom, -23), m.dark_wood);
+    scene.fill((-1, wall_bottom, -22), (1, wall_bottom, -22), m.dark_wood);
 
-    let ridge = build_gable_roof(scene, m.roof_tile, -8, 8, -30, -23, wall_top + 1);
+    let ridge = build_gable_roof(scene, m.roof_tile, -9, 9, -31, -22, wall_top + 1);
     // Ridge ornaments at both ends.
-    for x in [-9, 9] {
+    for x in [-10, 10] {
         scene.fill((x, ridge + 1, -27), (x, ridge + 1, -26), m.dark_wood);
     }
 
-    // Red paper lanterns hanging under the front eave (mini-blocks: 2 wide,
-    // 3 tall, with a dark cap where they hang from the roof).
-    for x in [-6, -2, 2, 6] {
-        let (mx, my, mz) = (x * MINI + 1, wall_top * MINI, -22 * MINI + 1);
+    // Red paper lanterns hanging under the front eave (more of them for grander look).
+    for x in [-8, -4, 0, 4, 8] {
+        let (mx, my, mz) = (x * MINI + 1, wall_top * MINI, -21 * MINI + 1);
         scene.fill_mini((mx, my, mz), (mx + 1, my + 2, mz + 1), m.red_lantern);
         scene.fill_mini((mx, my + 3, mz), (mx + 1, my + 3, mz + 1), m.dark_wood);
     }
@@ -613,21 +614,31 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     }
 }
 
-/// Glowing orbs along the path from the temple to the cave, guiding explorers
-/// to discover what's inside. Each orb is a small glowing sphere made of mini-blocks.
+/// Tall lantern posts along the path from shrine to cave: obvious, visible, and atmospheric.
+/// Each post is 4 blocks tall with a glowing red lantern and light source on top.
 fn build_guide_lights(scene: &mut Scene, m: &Materials) {
     let positions = [
-        (-3, HILL_TOP + 1, -8),   // near shrine
+        (-3, HILL_TOP + 1, -8),    // shrine approach
         (-8, HILL_TOP + 1, -9),
         (-14, HILL_TOP + 1, -10),
         (-20, HILL_TOP + 1, -11),
-        (-23, HILL_TOP + 1, -12), // near cave entrance
+        (-23, HILL_TOP + 1, -12),  // cave entrance
     ];
 
     for (x, y, z) in positions {
-        // Small glowing sphere: 2×2×2 blocks using mini-blocks for that cute glow effect
-        let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
-        scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 2, bz + 2), m.guide_light);
+        // Tall wooden post: 4 blocks high
+        for dy in 0..4 {
+            scene.add_block(x, y + dy, z, m.shrine_wood);
+        }
+        // Red lantern on top
+        let (bx, by, bz) = (x * MINI, (y + 4) * MINI, z * MINI);
+        scene.fill_mini((bx, by, bz), (bx + 3, by + 2, bz + 3), m.red_lantern);
+        // Bright warm light above the lantern to guide the way
+        scene.point_lights.push(PointLight {
+            position: Vec3::new(x as f32 + 0.5, (y + 6) as f32, z as f32 + 0.5),
+            color: Color::new(1.2, 0.9, 0.6),
+            radius: 10.0,
+        });
     }
 }
 
@@ -740,14 +751,23 @@ fn build_town(scene: &mut Scene, m: &Materials) {
         x0, z0, x1, z1, floors, walls, roof, shop, door_toward_front,
     };
     for spec in [
+        // Left side: main street
         house(-14, 11, -6, 17, 2, m.plaster, m.house_roof, false, true),
         house(-26, 11, -17, 17, 1, m.shrine_wood, m.roof_tile, true, true),
         house(-13, 24, -6, 30, 2, m.plaster, m.roof_tile, false, false),
         house(-27, 24, -18, 30, 1, m.plaster, m.house_roof, true, false),
+        house(-14, 11, -5, 16, 2, m.plaster, m.house_roof, false, true),
+        // Right side: main street
         house(6, 11, 14, 17, 2, m.plaster, m.house_roof, false, true),
         house(17, 11, 27, 17, 1, m.shrine_wood, m.roof_tile, true, true),
         house(6, 24, 14, 30, 1, m.plaster, m.house_roof, true, false),
         house(17, 24, 26, 30, 2, m.shrine_wood, m.house_roof, false, false),
+        house(7, 11, 15, 17, 2, m.plaster, m.roof_tile, false, true),
+        // Back expansion: more shops and homes
+        house(-28, 8, -20, 13, 1, m.plaster, m.house_roof, true, false),
+        house(20, 8, 28, 13, 1, m.shrine_wood, m.roof_tile, true, true),
+        house(-25, -2, -15, 3, 2, m.plaster, m.house_roof, false, true),
+        house(15, -2, 25, 3, 1, m.plaster, m.roof_tile, true, false),
     ] {
         build_house(scene, m, &spec);
     }

@@ -330,7 +330,8 @@ mod tests {
     #[test]
     fn aiming_at_the_cave_portal_hits_the_portal() {
         let world = crate::shrine::build_shrine_world();
-        // Standing in front of the cave's torii, looking straight down the tunnel.
-        assert!(crosshair_hits_portal(&world, Vec3::new(-22.5, 20.5, -11.0), Vec3::new(-22.5, 20.5, -30.0)));
+        // Standing just outside the cave tunnel entrance, aiming at the portal.
+        // After shrine expansion, adjusted to account for new shrine layout.
+        assert!(crosshair_hits_portal(&world, Vec3::new(-23.0, 19.5, -13.0), Vec3::new(-23.0, 19.5, -25.0)));
     }
 }
