@@ -74,6 +74,18 @@ fn trace_ray(ray: &Ray, scene: &Scene, depth: u32) -> Color {
 fn shade_hit(ray: &Ray, hit: &Hit, scene: &Scene, depth: u32) -> Color {
     let material = &scene.materials[hit.material];
 
+    // The top of a see-through liquid gets moving ripples. The geometry stays
+    // flat; only the normal is tilted, but lighting, reflection and refraction
+    // all use the normal, so the glints, the mirrored sky and the koi seen
+    // through the water all wobble as if the surface were moving.
+    let rippled;
+    let hit = if material.transparency > 0.0 && hit.normal.y > 0.5 {
+        rippled = Hit { normal: ripple_normal(hit.point, scene.time), ..*hit };
+        &rippled
+    } else {
+        hit
+    };
+
     // The surface's own look (texture + sunlight + highlight). Direction
     // from the surface back toward the eye is the reverse of the ray.
     let local_color = shade_surface(scene, hit, -ray.direction);
@@ -200,11 +212,18 @@ fn shade_surface(scene: &Scene, hit: &Hit, view_direction: Vec3) -> Color {
     } else {
         material.texture_side
     };
-    let (u, v) = face_uv(hit.point, normal);
+    // See-through liquids: slide the texture slowly, so the water seems to flow.
+    let texture_point = if material.transparency > 0.0 {
+        hit.point + Vec3::new(scene.time * 0.15, 0.0, scene.time * 0.08)
+    } else {
+        hit.point
+    };
+    let (u, v) = face_uv(texture_point, normal);
     let surface_color = scene.textures[texture_number].sample(u, v) * material.albedo;
 
     // Ambient: a little light everywhere, so shadows are not pitch black.
-    let ambient = surface_color * scene.ambient;
+    // Glow: light the surface makes itself, so it shows even in shadow.
+    let ambient = surface_color * scene.ambient + surface_color * material.glow;
 
     // How directly the face points at the sun: 1 = straight at it, 0 or less = away.
     let facing_sun = normal.dot(to_sun);
@@ -235,6 +254,21 @@ fn is_in_shadow(scene: &Scene, hit: &Hit, to_sun: Vec3) -> bool {
     // The sun is infinitely far away, so a blocker at ANY distance counts.
     // (For a lamp at distance d, we would use t_max = d instead.)
     scene.is_blocked(&shadow_ray, 0.0, f32::INFINITY)
+}
+
+/// The normal of a gently rippling horizontal water surface at `point`.
+///
+/// Height of the waves: h(x, z) = sum of three sine waves moving over time.
+/// A surface's normal is (−∂h/∂x, 1, −∂h/∂z), normalized: the steeper the
+/// wave, the more the normal tilts. The derivative of A·sin(k·x + c) is
+/// A·k·cos(k·x + c), which is what each term below is.
+fn ripple_normal(point: Vec3, time: f32) -> Vec3 {
+    const HEIGHT: f32 = 0.04; // wave height, in blocks: small, so it stays calm
+    let (x, z) = (point.x, point.z);
+    let diagonal = (1.3 * (x + z) + 2.0 * time).cos();
+    let slope_x = HEIGHT * (1.7 * (1.7 * x + 1.1 * time).cos() + 0.5 * 1.3 * diagonal);
+    let slope_z = HEIGHT * (2.3 * (2.3 * z - 1.4 * time).cos() + 0.5 * 1.3 * diagonal);
+    Vec3::new(-slope_x, 1.0, -slope_z).normalized()
 }
 
 /// Texture coordinates (u, v), each 0..1, for a point on a block face.

@@ -1,5 +1,5 @@
 use crate::color::Color;
-use crate::cube::Hit;
+use crate::cube::{Cube, Hit};
 use crate::cubemap;
 use crate::grid::{BlockGrid, Boundary};
 use crate::material::Material;
@@ -41,6 +41,18 @@ pub struct Scene {
     /// Texture numbers of the six skybox faces (+X, -X, +Y, -Y, +Z, -Z),
     /// or None to fall back to a plain gradient.
     skybox_faces: Option<[usize; 6]>,
+    /// Seconds since the program started; drives water ripples.
+    pub time: f32,
+    /// Small cubes that move every frame (falling petals), grouped so a whole
+    /// group can be skipped with one box test. Rebuilt by Animation::update.
+    /// Simplification: they don't cast shadows.
+    pub particle_groups: Vec<ParticleGroup>,
+}
+
+pub struct ParticleGroup {
+    /// A box enclosing every particle in the group.
+    pub bounds: Cube,
+    pub particles: Vec<Cube>,
 }
 
 impl Scene {
@@ -64,6 +76,8 @@ impl Scene {
             turn_sin: 0.0,
             local_sun_direction,
             skybox_faces: None,
+            time: 0.0,
+            particle_groups: Vec::new(),
         }
     }
 
@@ -130,7 +144,26 @@ impl Scene {
 
     /// The nearest block the ray hits between t_min and t_max.
     pub fn closest_hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<Hit> {
-        self.blocks.trace(ray, t_min, t_max)
+        let mut closest = self.blocks.trace(ray, t_min, t_max);
+        let mut limit = closest.as_ref().map_or(t_max, |hit| hit.t);
+
+        // Small moving particles (falling petals) are not in the grid, so test
+        // them directly, with the Phase 3 slab method. To keep that cheap, each
+        // group sits inside one bounding box: if the ray misses the box (before
+        // the nearest block), it can't hit anything inside, and we skip them all.
+        for group in &self.particle_groups {
+            let might_hit = group.bounds.contains(ray.at(t_min)) || group.bounds.intersect(ray, t_min, limit).is_some();
+            if !might_hit {
+                continue;
+            }
+            for particle in &group.particles {
+                if let Some(hit) = particle.intersect(ray, t_min, limit) {
+                    limit = hit.t;
+                    closest = Some(hit);
+                }
+            }
+        }
+        closest
     }
 
     /// True if an OPAQUE block is in the way between t_min and t_max (for shadows).

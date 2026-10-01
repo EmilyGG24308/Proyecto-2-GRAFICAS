@@ -11,6 +11,7 @@
 //! "fill this box with that material" steps. Reading them top to bottom
 //! is reading the scene.
 
+use crate::animation::Animation;
 use crate::color::Color;
 use crate::material::Material;
 use crate::scene::{Scene, Sun};
@@ -30,6 +31,7 @@ const SLOPE_END: i32 = 7;
 struct Materials {
     grass: usize,
     petal_grass: usize,
+    petal: usize,
     dirt: usize,
     rock: usize,
     moss_rock: usize,
@@ -53,7 +55,8 @@ struct Materials {
     concrete: usize,
 }
 
-pub fn build_shrine_scene() -> Scene {
+/// Builds the scene, plus the Animation that moves its petals and koi.
+pub fn build_shrine_scene() -> (Scene, Animation) {
     let sun = Sun {
         direction_to_sun: Vec3::new(0.35, 1.0, 0.8).normalized(),
         color: Color::new(1.0, 0.95, 0.85), // warm afternoon sunlight
@@ -88,16 +91,31 @@ pub fn build_shrine_scene() -> Scene {
     build_town(&mut scene, &m);
 
     // Sakura: (x, z, trunk height, canopy radius)
+    let mut animation = Animation::new(m.petal, m.koi, m.water);
     for (x, z, trunk, radius) in [(-15, -17, 6, 5), (13, -27, 7, 5), (24, -29, 5, 4), (27, -10, 5, 4), (-24, -3, 4, 4), (-29, 16, 3, 3), (29, 18, 3, 3)] {
         let ground = surface_top(&scene, x, z);
         build_sakura_tree(&mut scene, &m, x, z, ground, trunk, radius);
+        // Petals fall from the canopy (centered one block above the trunk top)
+        // down to the grass surface (the top of block `ground`).
+        let canopy_center = Vec3::new(x as f32 + 0.5, (ground + trunk + 1) as f32 + 0.5, z as f32 + 0.5);
+        animation.add_petal_tree(canopy_center, radius as f32, (ground + 1) as f32, (radius * 3) as usize);
     }
+    add_swimming_koi(&mut animation);
     // Pines, for deep green contrast next to all the pink.
     for (x, z, height) in [(-29, -11, 9), (28, -31, 8), (26, 2, 7), (-28, 6, 6)] {
         let ground = surface_top(&scene, x, z);
         build_pine_tree(&mut scene, &m, x, z, ground, height);
     }
-    scene
+    (scene, animation)
+}
+
+/// Four koi circling the pond (center 15, -16) on ovals of different sizes,
+/// at two depths, some clockwise and some counterclockwise.
+fn add_swimming_koi(animation: &mut Animation) {
+    animation.add_koi((15.0, -15.5), (5.0, 3.0), HILL_TOP - 2, 0.35, 0.0);
+    animation.add_koi((15.0, -15.5), (3.5, 2.2), HILL_TOP - 3, -0.45, 2.0);
+    animation.add_koi((13.0, -14.0), (2.5, 1.5), HILL_TOP - 2, 0.6, 4.0);
+    animation.add_koi((17.0, -16.5), (3.0, 2.0), HILL_TOP - 3, -0.3, 1.0);
 }
 
 fn add_materials(scene: &mut Scene) -> Materials {
@@ -130,7 +148,9 @@ fn add_materials(scene: &mut Scene) -> Materials {
     });
 
     let sakura_texture = scene.load_texture("sakura");
-    let sakura_light = scene.add_material(Material::opaque(sakura_texture, 0.95, 0.05, 4.0));
+    // (Plus a slight glow: blossoms are thin, so their shaded undersides stay pink.)
+    let sakura_light = scene.add_material(Material { glow: 0.15, ..Material::opaque(sakura_texture, 0.95, 0.05, 4.0) });
+    let sakura_dark = scene.add_material(Material { glow: 0.12, ..Material::opaque(sakura_texture, 0.75, 0.05, 4.0) });
 
     let water_texture = scene.load_texture("water");
     let water = scene.add_material(Material {
@@ -141,6 +161,12 @@ fn add_materials(scene: &mut Scene) -> Materials {
     });
 
     // ================= Supporting materials =================
+    // Falling petals: the blossom texture with a soft glow, so they stay pink
+    // in the shade (standing in for sunlight shining through thin petals).
+    let petal = scene.add_material(Material { glow: 0.5, ..Material::opaque(sakura_texture, 0.95, 0.05, 4.0) });
+    // Lantern paper glows a little, even by day.
+    let paper_texture = scene.load_texture("paper");
+    let paper = scene.add_material(Material { glow: 0.25, ..Material::opaque(paper_texture, 0.95, 0.0, 1.0) });
     // Grass with fallen petals: same sides as grass, petals on top.
     let petal_top = scene.load_texture("petal_grass");
     let petal_grass = scene.add_material(Material {
@@ -180,14 +206,15 @@ fn add_materials(scene: &mut Scene) -> Materials {
         roof_tile: textured("roof_tile", 0.9, 0.3, 24.0),
         sakura_light,
         // Same blossom texture, lit a little less, so canopies have two pinks.
-        sakura_dark: textured("sakura", 0.75, 0.05, 4.0),
+        sakura_dark,
         leaves: textured("leaves", 0.9, 0.05, 8.0),
         water,
         sand: textured("sand", 0.9, 0.0, 1.0),
         plaster: textured("plaster", 0.9, 0.02, 4.0),
         house_roof: textured("house_roof", 0.9, 0.2, 16.0),
         road: textured("road", 0.9, 0.0, 1.0),
-        paper: textured("paper", 0.95, 0.0, 1.0),
+        paper,
+        petal,
         koi: textured("koi", 0.95, 0.3, 32.0), // wet, slightly shiny scales
         window,
         awning: textured("awning", 0.9, 0.05, 8.0),
@@ -419,11 +446,7 @@ fn build_pond_and_bridge(scene: &mut Scene, m: &Materials) {
     for (x, z) in [(9, -14), (21, -18), (13, -12)] {
         scene.add_block(x, HILL_TOP - 1, z, m.leaves);
     }
-    // Koi, at two depths, pointing in different directions.
-    scene.fill((12, HILL_TOP - 2, -14), (13, HILL_TOP - 2, -14), m.koi);
-    scene.fill((16, HILL_TOP - 3, -15), (16, HILL_TOP - 3, -13), m.koi);
-    scene.fill((10, HILL_TOP - 3, -16), (11, HILL_TOP - 3, -16), m.koi);
-    scene.fill((20, HILL_TOP - 2, -16), (21, HILL_TOP - 2, -16), m.koi);
+    // (The koi are added by `add_swimming_koi`: they move, so Animation owns them.)
 
     // Arched bridge along X near the back of the pond (z = -19), so the koi in
     // front stay visible: rises by one block twice toward the middle.

@@ -21,6 +21,10 @@ pub struct Material {
     /// How much light bends entering it (air = 1.0, water = 1.33, glass = 1.5).
     /// Only matters when transparency > 0.
     pub refractive_index: f32,
+    /// Light the surface gives off by itself, as a fraction of its texture
+    /// color (0 = none). Lit lanterns glow; petals get a little, standing in
+    /// for sunlight shining through thin petals.
+    pub glow: f32,
 }
 
 impl Material {
@@ -37,6 +41,7 @@ impl Material {
             transparency: 0.0,
             reflectivity: 0.0,
             refractive_index: 1.0,
+            glow: 0.0,
         }
     }
 }

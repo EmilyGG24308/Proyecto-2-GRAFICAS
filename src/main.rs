@@ -1,3 +1,4 @@
+mod animation;
 mod camera;
 mod color;
 mod controls;
@@ -36,7 +37,7 @@ const WINDOW_TITLE: &str = "Mikage Shrine Raytracer";
 
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
-    let mut scene = shrine::build_shrine_scene();
+    let (mut scene, mut animation) = shrine::build_shrine_scene();
     let block_count = scene.blocks.block_count();
     // N key (or --normals) shows each face's normal as a color, to check the faces.
     let mut show_normals = std::env::args().any(|argument| argument == "--normals");
@@ -53,6 +54,9 @@ fn main() {
         if std::env::args().any(|argument| argument == "--hd") {
             framebuffer = Framebuffer::new(HD_WIDTH, HD_HEIGHT);
         }
+        // `--time=12.5` freezes the animation at that moment (default: 0).
+        let time = std::env::args().find_map(|a| a.strip_prefix("--time=").and_then(|t| t.parse::<f32>().ok()));
+        animation.update(&mut scene, time.unwrap_or(0.0));
         render_frame(&mut framebuffer, &camera, &scene, show_normals);
         save_screenshot(&framebuffer);
         return;
@@ -71,6 +75,7 @@ fn main() {
     };
 
     let mut controls = starting_controls();
+    let start_time = Instant::now();
     let mut last_frame = Instant::now();
     let mut frames_since_title_update = 0;
     let mut last_title_update = Instant::now();
@@ -95,6 +100,7 @@ fn main() {
         // Time since the last frame, capped so a hiccup doesn't teleport you.
         let seconds = last_frame.elapsed().as_secs_f32().min(0.1);
         last_frame = Instant::now();
+        animation.update(&mut scene, start_time.elapsed().as_secs_f32());
         controls.update(&window, seconds);
         scene.set_turn_angle(controls.diorama_angle);
         let camera = controls.camera();

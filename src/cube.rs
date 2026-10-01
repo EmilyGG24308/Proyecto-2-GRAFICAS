@@ -11,6 +11,7 @@ pub struct Cube {
 }
 
 /// Hit record: everything we need to know about where a ray hit a surface.
+#[derive(Clone, Copy, Debug)]
 pub struct Hit {
     /// Distance along the ray.
     pub t: f32,
