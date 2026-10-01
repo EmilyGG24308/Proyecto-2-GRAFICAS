@@ -386,8 +386,8 @@ fn build_hilltop_paths(scene: &mut Scene, m: &Materials) {
     scene.fill((viewing_x.0, HILL_TOP, viewing_z.0), (viewing_x.1, HILL_TOP, viewing_z.1), m.path_stone);
 
     // Characters in front of the shrine
-    build_tomoe(scene, &m, -4, 0, -20);      // White fox character on left
-    build_nanami(scene, &m, 4, 0, -20);      // Dark-haired character on right
+    build_tomoe(scene, &m, -4, 2, -20);      // White fox character on left
+    build_nanami(scene, &m, 4, 2, -20);      // Dark-haired character on right
     // Railing: mini-block posts at corners
     for (x, z) in [(viewing_x.0, viewing_z.0), (viewing_x.0, viewing_z.1), (viewing_x.1, viewing_z.0), (viewing_x.1, viewing_z.1)] {
         let (bx, by, bz) = (x * MINI, (HILL_TOP + 1) * MINI, z * MINI);
