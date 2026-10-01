@@ -265,106 +265,109 @@ fn save_screenshot(framebuffer: &Framebuffer) {
     }
 }
 
-/// Draw the homepage/intro screen with welcome message and instructions
+/// Draw the homepage/intro screen
 fn draw_homepage(framebuffer: &mut Framebuffer) {
-    // Fill with beautiful pastel color
-    let bg_color = Color::new(0.92, 0.88, 0.96);
-    for (_, row) in framebuffer.rows_mut() {
+    let h = framebuffer.height;
+
+    // Gradient background
+    for (y, (_, row)) in framebuffer.rows_mut().enumerate() {
+        let t = y as f32 / h as f32;
+        let r = 0.88 + t * 0.08;
+        let g = 0.82 + t * 0.10;
+        let b = 0.96 - t * 0.06;
+        let color = Color::new(r, g, b);
         for pixel in row {
-            *pixel = bg_color;
+            *pixel = color;
         }
     }
 
-    let title_color = Color::new(0.7, 0.5, 0.85); // Deep purple
-    let text_color = Color::new(0.6, 0.4, 0.75);  // Medium purple
-    let accent_color = Color::new(1.0, 0.8, 0.85); // Light pink
+    let title_color = Color::new(0.75, 0.4, 0.88);
+    let text_color = Color::new(0.5, 0.2, 0.7);
+    let accent_color = Color::new(1.0, 0.7, 0.85);
 
-    // Title: "MIKAGE SHRINE"
-    draw_text(framebuffer, "MIKAGE SHRINE", 90, 40, 2, title_color);
+    // Title
+    draw_text_simple(framebuffer, "MIKAGE SHRINE", 40, 30, 2, title_color);
 
-    // Main instructions
-    draw_text(framebuffer, "Welcome to Mikage Shrine", 85, 120, 1, text_color);
-    draw_text(framebuffer, "A raytraced voxel diorama", 75, 145, 1, text_color);
+    // Decorative line
+    draw_horz_line(framebuffer, 0, 70, framebuffer.width, accent_color);
 
-    // Game info
-    draw_text(framebuffer, "FEATURES:", 60, 185, 1, title_color);
-    draw_text(framebuffer, "Two beautiful worlds to explore", 80, 205, 1, text_color);
-    draw_text(framebuffer, "Portal travel between shrine and spirit", 50, 220, 1, text_color);
-    draw_text(framebuffer, "Meet Tomoe and Nanami", 115, 235, 1, text_color);
-    draw_text(framebuffer, "Animated koi and sakura petals", 70, 250, 1, text_color);
+    // Welcome
+    draw_text_simple(framebuffer, "WELCOME", 150, 100, 1, text_color);
+    draw_text_simple(framebuffer, "EXPLORE TWO WORLDS", 100, 130, 1, title_color);
+    draw_text_simple(framebuffer, "Shrine & Spirit Dimension", 95, 150, 1, text_color);
+
+    // Characters
+    draw_text_simple(framebuffer, "MEET TOMOE & NANAMI", 95, 185, 1, title_color);
+    draw_text_simple(framebuffer, "Animated Koi & Sakura Petals", 80, 205, 1, text_color);
 
     // Controls
-    draw_text(framebuffer, "WASD move   Space/Shift up/down", 50, 285, 1, text_color);
-    draw_text(framebuffer, "Scroll zoom   Q/E rotate   Esc menu", 40, 300, 1, text_color);
+    draw_text_simple(framebuffer, "CONTROLS", 155, 240, 1, title_color);
+    draw_text_simple(framebuffer, "WASD move | Space/Shift up/down", 60, 260, 1, text_color);
+    draw_text_simple(framebuffer, "Scroll zoom | Q/E rotate", 105, 275, 1, text_color);
 
-    // Main call-to-action
-    draw_text(framebuffer, "CLICK TO START", 105, 330, 2, accent_color);
+    // Action
+    draw_horz_line(framebuffer, 0, 300, framebuffer.width, accent_color);
+    draw_text_simple(framebuffer, "CLICK TO EXPLORE", 110, 320, 2, accent_color);
 }
 
-/// Draw text using a simple bitmap font
-fn draw_text(framebuffer: &mut Framebuffer, text: &str, x: usize, y: usize, scale: usize, color: Color) {
-    let char_width = 6 * scale;
-    let mut current_x = x;
-
+fn draw_text_simple(framebuffer: &mut Framebuffer, text: &str, x: usize, y: usize, scale: usize, color: Color) {
+    let mut pos_x = x;
     for ch in text.chars() {
-        if current_x + char_width > framebuffer.width {
-            break;
-        }
-        draw_char(framebuffer, ch, current_x, y, scale, color);
-        current_x += char_width + scale;
+        draw_char_block(framebuffer, ch, pos_x, y, scale, color);
+        pos_x += 8 * scale + 2;
     }
 }
 
-/// Draw a single character from bitmap font
-fn draw_char(framebuffer: &mut Framebuffer, ch: char, x: usize, y: usize, scale: usize, color: Color) {
-    let patterns: &[(char, &[u8; 5])] = &[
-        ('A', &[0b01110, 0b10001, 0b11111, 0b10001, 0b10001]),
-        ('C', &[0b01110, 0b10000, 0b10000, 0b10000, 0b01110]),
-        ('E', &[0b11111, 0b10000, 0b11110, 0b10000, 0b11111]),
-        ('F', &[0b11111, 0b10000, 0b11110, 0b10000, 0b10000]),
-        ('H', &[0b10001, 0b10001, 0b11111, 0b10001, 0b10001]),
-        ('I', &[0b11111, 0b00100, 0b00100, 0b00100, 0b11111]),
-        ('K', &[0b10001, 0b10010, 0b11100, 0b10010, 0b10001]),
-        ('M', &[0b10101, 0b11111, 0b10101, 0b10101, 0b10101]),
-        ('N', &[0b11001, 0b10101, 0b10011, 0b10001, 0b10001]),
-        ('O', &[0b01110, 0b10001, 0b10001, 0b10001, 0b01110]),
-        ('P', &[0b11110, 0b10001, 0b11110, 0b10000, 0b10000]),
-        ('R', &[0b11110, 0b10001, 0b11110, 0b10010, 0b10001]),
-        ('S', &[0b01111, 0b10000, 0b01110, 0b00001, 0b11110]),
-        ('T', &[0b11111, 0b00100, 0b00100, 0b00100, 0b00100]),
-        ('U', &[0b10001, 0b10001, 0b10001, 0b10001, 0b01110]),
-        ('W', &[0b10101, 0b10101, 0b10101, 0b11111, 0b10101]),
-        ('Y', &[0b10001, 0b01010, 0b00100, 0b00100, 0b00100]),
-        ('Z', &[0b11111, 0b00010, 0b00100, 0b01000, 0b11111]),
-        (' ', &[0b00000, 0b00000, 0b00000, 0b00000, 0b00000]),
-        (':', &[0b00000, 0b00100, 0b00000, 0b00100, 0b00000]),
-        ('/', &[0b00001, 0b00010, 0b00100, 0b01000, 0b10000]),
-    ];
-
-    let upper = ch.to_ascii_uppercase();
-    for (pat_ch, pattern) in patterns {
-        if *pat_ch == upper {
-            for row_idx in 0..5 {
-                let row_data = pattern[row_idx];
-                for col_idx in 0..5 {
-                    if (row_data >> (4 - col_idx)) & 1 == 1 {
-                        for sy in 0..scale {
-                            for sx in 0..scale {
-                                let px = x + col_idx * scale + sx;
-                                let py = y + row_idx * scale + sy;
-                                if px < framebuffer.width && py < framebuffer.height {
-                                    if let Some((_, row)) = framebuffer.rows_mut().nth(py) {
-                                        if px < row.len() {
-                                            row[px] = color;
-                                        }
-                                    }
+fn draw_char_block(framebuffer: &mut Framebuffer, ch: char, x: usize, y: usize, scale: usize, color: Color) {
+    let s = scale as i32;
+    match ch.to_ascii_uppercase() {
+        'A'..='Z' | '0'..='9' => {
+            for dy in 0..8 {
+                for dx in 0..6 {
+                    let px = x + dx * scale;
+                    let py = y + dy * scale;
+                    if px < framebuffer.width && py < framebuffer.height {
+                        let should_fill = match ch.to_ascii_uppercase() {
+                            'A' => (dy == 0 && dx >= 1 && dx <= 4) || (dy == 3 && dx >= 1 && dx <= 4) || (dx == 0 || dx == 5),
+                            'C' => (dy == 0 || dy == 7) || (dx == 5),
+                            'E' => (dy == 0 || dy == 3 || dy == 7) || (dx == 0),
+                            'H' => (dx == 0 || dx == 5) || (dy == 3 && dx >= 0 && dx <= 5),
+                            'I' => dx >= 2 && dx <= 3,
+                            'K' => (dx == 0) || (dx == 5 && dy <= 3) || (dx == 4 && dy >= 3),
+                            'M' => (dx == 0 || dx == 5) || (dx == 2 && dy <= 3) || (dx == 3 && dy <= 3),
+                            'N' => (dx == 0 || dx == 5) || (dx == 3 && dy >= 2 && dy <= 5),
+                            'O' => (dy == 0 || dy == 7) || (dx == 0 || dx == 5),
+                            'P' => (dx == 0) || (dy == 0 || dy == 3 || dy == 4) || (dx == 5 && dy <= 3),
+                            'S' => (dy == 0 || dy == 3 || dy == 7) || (dx == 0 && dy >= 3 && dy <= 7) || (dx == 5 && dy <= 3),
+                            'T' => (dy == 0) || (dx >= 2 && dx <= 3),
+                            'U' => (dx == 0 || dx == 5) || (dy == 7 && dx >= 0 && dx <= 5),
+                            'W' => (dx == 0 || dx == 5) || (dx == 2 && dy >= 3) || (dx == 3 && dy >= 3),
+                            'Y' => (dx == 0 || dx == 5) && dy <= 3 || (dx >= 2 && dx <= 3) && dy >= 3,
+                            'Z' => (dy == 0 || dy == 7) || (dx == 5 && dy <= 3) || (dx == 0 && dy >= 4),
+                            ' ' => false,
+                            _ => dx == 0 || dx == 5 || dy == 0 || dy == 7,
+                        };
+                        if should_fill {
+                            if let Some((_, row)) = framebuffer.rows_mut().nth(py) {
+                                if px < row.len() {
+                                    row[px] = color;
                                 }
                             }
                         }
                     }
                 }
             }
-            return;
+        }
+        _ => {}
+    }
+}
+
+fn draw_horz_line(framebuffer: &mut Framebuffer, x1: usize, y: usize, x2: usize, color: Color) {
+    if y < framebuffer.height {
+        if let Some((_, row)) = framebuffer.rows_mut().nth(y) {
+            for x in x1..x2.min(row.len()) {
+                row[x] = color;
+            }
         }
     }
 }
