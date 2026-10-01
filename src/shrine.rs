@@ -513,22 +513,54 @@ fn build_guardian_statue(scene: &mut Scene, m: &Materials, x: i32, z: i32) {
 /// Stone lantern (toro), standing in block (x, y, z) and the one above it:
 /// a wide base, a thin post, a glowing paper fire-box with stone corners, a
 /// roof that sticks out on every side, and a small knob on top.
+/// Supports three sizes: 0 = tiny, 1 = normal (default), 2 = large
 fn build_stone_lantern(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    build_stone_lantern_size(scene, m, x, y, z, 1);
+}
+
+fn build_stone_lantern_size(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32, size: i32) {
     let (bx, by, bz) = (x * MINI, y * MINI, z * MINI);
-    scene.fill_mini((bx, by, bz), (bx + 3, by, bz + 3), m.rock); // base
-    scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 3, bz + 2), m.rock); // post
-    scene.fill_mini((bx, by + 4, bz), (bx + 3, by + 5, bz + 3), m.paper); // fire-box
-    for (cx, cz) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
-        scene.fill_mini((bx + cx, by + 4, bz + cz), (bx + cx, by + 5, bz + cz), m.rock); // its corners
-    }
-    // Roof: one mini-block wider than the lantern on every side.
-    for mx in bx - 1..=bx + 4 {
-        for mz in bz - 1..=bz + 4 {
-            scene.add_mini_if_empty(mx, by + 6, mz, m.path_stone);
+    match size {
+        0 => {
+            // Tiny lantern: minimal size
+            scene.fill_mini((bx + 1, by, bz + 1), (bx + 2, by, bz + 2), m.rock);
+            scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 1, bz + 2), m.rock);
+            scene.fill_mini((bx + 1, by + 2, bz + 1), (bx + 2, by + 2, bz + 2), m.paper);
+            scene.fill_mini((bx + 1, by + 3, bz + 1), (bx + 2, by + 3, bz + 2), m.path_stone);
+        }
+        2 => {
+            // Large lantern: 1.5x size
+            scene.fill_mini((bx, by, bz), (bx + 3, by, bz + 3), m.rock);
+            scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 3, bz + 2), m.rock);
+            scene.fill_mini((bx, by + 4, bz), (bx + 3, by + 5, bz + 3), m.paper);
+            for (cx, cz) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
+                scene.fill_mini((bx + cx, by + 4, bz + cz), (bx + cx, by + 5, bz + cz), m.rock);
+            }
+            for mx in bx - 1..=bx + 4 {
+                for mz in bz - 1..=bz + 4 {
+                    scene.add_mini_if_empty(mx, by + 6, mz, m.path_stone);
+                }
+            }
+            scene.fill_mini((bx, by + 7, bz), (bx + 3, by + 7, bz + 3), m.path_stone);
+            scene.fill_mini((bx + 1, by + 8, bz + 1), (bx + 2, by + 8, bz + 2), m.rock);
+        }
+        _ => {
+            // Normal size (default)
+            scene.fill_mini((bx, by, bz), (bx + 3, by, bz + 3), m.rock);
+            scene.fill_mini((bx + 1, by + 1, bz + 1), (bx + 2, by + 3, bz + 2), m.rock);
+            scene.fill_mini((bx, by + 4, bz), (bx + 3, by + 5, bz + 3), m.paper);
+            for (cx, cz) in [(0, 0), (3, 0), (0, 3), (3, 3)] {
+                scene.fill_mini((bx + cx, by + 4, bz + cz), (bx + cx, by + 5, bz + cz), m.rock);
+            }
+            for mx in bx - 1..=bx + 4 {
+                for mz in bz - 1..=bz + 4 {
+                    scene.add_mini_if_empty(mx, by + 6, mz, m.path_stone);
+                }
+            }
+            scene.fill_mini((bx, by + 7, bz), (bx + 3, by + 7, bz + 3), m.path_stone);
+            scene.fill_mini((bx + 1, by + 8, bz + 1), (bx + 2, by + 8, bz + 2), m.rock);
         }
     }
-    scene.fill_mini((bx, by + 7, bz), (bx + 3, by + 7, bz + 3), m.path_stone);
-    scene.fill_mini((bx + 1, by + 8, bz + 1), (bx + 2, by + 8, bz + 2), m.rock); // knob
 }
 
 /// A small lantern for the top of a wall: stone foot, paper light, stone cap.
@@ -682,12 +714,12 @@ fn build_guide_lights(scene: &mut Scene, m: &Materials) {
     let cave_entrance_z = -13;
     let y = HILL_TOP + 1;
 
-    // Stone lantern right at the cave entrance
-    build_stone_lantern(scene, m, cave_entrance_x, y, cave_entrance_z);
+    // Stone lantern right at the cave entrance (large for prominence)
+    build_stone_lantern_size(scene, m, cave_entrance_x, y, cave_entrance_z, 2);
 
-    // Two additional guide lanterns forming a subtle path toward the cave
-    build_stone_lantern(scene, m, -15, y, -15);
-    build_stone_lantern(scene, m, -20, y, -12);
+    // Two additional guide lanterns forming a subtle path toward the cave (varied sizes)
+    build_stone_lantern_size(scene, m, -15, y, -15, 1);
+    build_stone_lantern_size(scene, m, -20, y, -12, 0);
 }
 
 /// More lanterns and flowers around the shrine area to make it feel grander
