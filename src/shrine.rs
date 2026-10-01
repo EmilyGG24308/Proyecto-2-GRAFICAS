@@ -384,6 +384,10 @@ fn build_hilltop_paths(scene: &mut Scene, m: &Materials) {
     let viewing_x = (8, 10);
     let viewing_z = (-23, -20);
     scene.fill((viewing_x.0, HILL_TOP, viewing_z.0), (viewing_x.1, HILL_TOP, viewing_z.1), m.path_stone);
+
+    // Characters in front of the shrine
+    build_tomoe(scene, &m, -4, 0, -20);      // White fox character on left
+    build_nanami(scene, &m, 4, 0, -20);      // Dark-haired character on right
     // Railing: mini-block posts at corners
     for (x, z) in [(viewing_x.0, viewing_z.0), (viewing_x.0, viewing_z.1), (viewing_x.1, viewing_z.0), (viewing_x.1, viewing_z.1)] {
         let (bx, by, bz) = (x * MINI, (HILL_TOP + 1) * MINI, z * MINI);
@@ -1008,4 +1012,62 @@ pub(crate) fn noise(x: i32, y: i32, z: i32) -> u32 {
     h = h.wrapping_mul(0x5bd1_e995);
     h ^= h >> 15;
     h % 100
+}
+
+/// Tomoe: white fox character with fluffy appearance
+fn build_tomoe(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    let base = y;
+
+    // Head (white, fluffy)
+    scene.fill((x - 1, base + 3, z - 1), (x + 1, base + 5, z + 1), m.plaster);
+
+    // Ears (pointed white)
+    scene.fill((x - 1, base + 5, z - 1), (x, base + 7, z), m.plaster);
+    scene.fill((x, base + 5, z - 1), (x + 1, base + 7, z), m.plaster);
+
+    // Body (upper)
+    scene.fill((x - 1, base + 1, z - 1), (x + 1, base + 3, z + 1), m.plaster);
+
+    // Lower body (slightly tapered)
+    scene.fill((x - 1, base - 1, z - 1), (x + 1, base + 1, z + 1), m.plaster);
+
+    // Arms (simplified)
+    scene.fill((x - 2, base + 1, z - 1), (x - 1, base + 2, z), m.plaster);
+    scene.fill((x + 1, base + 1, z - 1), (x + 2, base + 2, z), m.plaster);
+
+    // Tail (fluffy white, curved)
+    scene.fill((x + 2, base + 1, z - 2), (x + 3, base + 2, z - 1), m.plaster);
+    scene.fill((x + 2, base, z - 3), (x + 3, base + 1, z - 2), m.plaster);
+}
+
+/// Nanami: dark-haired human character with brown outfit
+fn build_nanami(scene: &mut Scene, m: &Materials, x: i32, y: i32, z: i32) {
+    let base = y;
+    let dark = m.shrine_wood;  // Dark material for hair
+    let skin = m.plaster;      // Light material for face/arms
+    let outfit = m.roof_tile;  // Brown material for outfit
+
+    // Head (skin colored)
+    scene.fill((x - 1, base + 3, z - 1), (x + 1, base + 5, z + 1), skin);
+
+    // Hair (long, dark, flowing)
+    scene.fill((x - 1, base + 4, z - 2), (x + 1, base + 7, z + 2), dark);
+
+    // Hair sides (longer on sides)
+    scene.fill((x - 2, base + 2, z - 1), (x - 1, base + 4, z + 1), dark);
+    scene.fill((x + 1, base + 2, z - 1), (x + 2, base + 4, z + 1), dark);
+
+    // Upper body (brown outfit)
+    scene.fill((x - 1, base + 1, z - 1), (x + 1, base + 3, z + 1), outfit);
+
+    // Lower body (skirt/pants, brown)
+    scene.fill((x - 1, base - 1, z - 1), (x + 1, base + 1, z + 1), outfit);
+
+    // Arms (skin colored)
+    scene.fill((x - 2, base + 1, z - 1), (x - 1, base + 2, z), skin);
+    scene.fill((x + 1, base + 1, z - 1), (x + 2, base + 2, z), skin);
+
+    // Legs (brown)
+    scene.fill((x - 1, base - 2, z - 1), (x - 1, base, z + 1), outfit);
+    scene.fill((x, base - 2, z - 1), (x, base, z + 1), outfit);
 }

@@ -49,6 +49,11 @@ enum Fade {
     In { since: Instant },
 }
 
+enum GameState {
+    Homepage,
+    Playing,
+}
+
 fn main() {
     let mut framebuffer = Framebuffer::new(RENDER_WIDTH, RENDER_HEIGHT);
     // Both worlds are built once at startup; the portal just switches between them.
@@ -93,6 +98,7 @@ fn main() {
         }
     };
 
+    let mut game_state = GameState::Homepage;
     let mut controls = if current == 0 { starting_controls() } else { (worlds[1].arrival)() };
     let mut fade = Fade::None;
     let start_time = Instant::now();
@@ -103,14 +109,35 @@ fn main() {
     while window.process_events() {
         // Esc gives the mouse back first; pressing it again quits.
         if window.was_key_pressed(key::ESCAPE) {
-            if window.is_mouse_captured() {
+            if matches!(game_state, GameState::Playing) && window.is_mouse_captured() {
                 window.set_mouse_captured(false);
-            } else {
+            } else if !matches!(game_state, GameState::Playing) || !window.is_mouse_captured() {
                 break;
             }
         }
         if window.was_key_pressed(key::N) {
             show_normals = !show_normals;
+        }
+
+        // Homepage: click to start exploring
+        if matches!(game_state, GameState::Homepage) {
+            if window.left_click().is_some() {
+                game_state = GameState::Playing;
+                current = 0; // Start in shrine world
+                controls = starting_controls();
+                window.set_title("Entering the Shrine...");
+            }
+            // Draw homepage
+            draw_homepage(&mut framebuffer);
+            window.present(&framebuffer);
+            frames_since_title_update += 1;
+            let elapsed = last_title_update.elapsed().as_secs_f32();
+            if elapsed >= 0.5 {
+                window.set_title(&format!("{WINDOW_TITLE} — Click to Explore — Welcome to Mikage Shrine 🏯"));
+                frames_since_title_update = 0;
+                last_title_update = Instant::now();
+            }
+            continue;
         }
 
         // Time since the last frame, capped so a hiccup doesn't teleport you.
@@ -236,4 +263,19 @@ fn save_screenshot(framebuffer: &Framebuffer) {
         Ok(()) => println!("Saved {}", path.display()),
         Err(error) => eprintln!("Could not save {}: {error}", path.display()),
     }
+}
+
+/// Draw the homepage/intro screen with welcome message and instructions
+fn draw_homepage(framebuffer: &mut Framebuffer) {
+    // Fill with beautiful pastel color
+    let bg_color = Color::new(0.92, 0.88, 0.96);
+    for (_, row) in framebuffer.rows_mut() {
+        for pixel in row {
+            *pixel = bg_color;
+        }
+    }
+
+    // Gentle fade overlay for welcome area
+    let welcome_color = Color::new(0.98, 0.95, 0.93);
+    framebuffer.fade_toward(welcome_color, 0.08);
 }
