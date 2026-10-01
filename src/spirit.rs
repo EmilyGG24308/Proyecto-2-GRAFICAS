@@ -354,28 +354,23 @@ fn build_central_stage(scene: &mut Scene, m: &Materials) {
         }
     }
 
-    // Grand central lantern tower (8 blocks tall with multiple lanterns)
+    // Grand central lantern tower (8 blocks tall with lanterns)
     for dy in 0..8 {
         scene.add_block(center_x, GROUND_TOP + 2 + dy, center_z, m.dark_wood);
-        if dy % 2 == 0 && dy > 0 {
-            // Lanterns jutting out at intervals
+        if dy % 3 == 0 && dy > 0 {
+            // Lanterns at intervals (reduced frequency for performance)
             for (dx, dz) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
                 scene.add_block(center_x + dx, GROUND_TOP + 2 + dy, center_z + dz, m.lantern);
-                scene.point_lights.push(PointLight {
-                    position: Vec3::new((center_x + dx) as f32 + 0.5, (GROUND_TOP + 3 + dy) as f32, (center_z + dz) as f32 + 0.5),
-                    color: Color::new(1.4, 0.7, 0.4),
-                    radius: 12.0,
-                });
             }
         }
     }
 
-    // Top lantern crown
+    // Top lantern crown with ONE point light (drastically reduced)
     scene.add_block(center_x, GROUND_TOP + 9, center_z, m.lantern);
     scene.point_lights.push(PointLight {
         position: Vec3::new(center_x as f32 + 0.5, (GROUND_TOP + 10) as f32, center_z as f32 + 0.5),
         color: Color::new(1.5, 0.8, 0.5),
-        radius: 15.0,
+        radius: 25.0,  // Larger radius = same effect with fewer lights
     });
 }
 
